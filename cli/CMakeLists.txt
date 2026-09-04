@@ -3,6 +3,7 @@ find_package(CLI11 CONFIG REQUIRED)
 
 add_executable(sched
     main.cpp
+    render.cpp
 )
 
 target_link_libraries(sched PRIVATE

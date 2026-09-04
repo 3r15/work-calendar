@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -20,5 +21,9 @@ std::string formatWeekday(Weekday day);
 std::string weekdayLabel(Weekday day);
 
 bool contains(const std::vector<Weekday>& days, Weekday day);
+
+// std::chrono 의 요일을 도메인 요일로. 이 변환이 domain 쪽에 있는 이유는 util 이 domain 을
+// 알면 의존 방향이 뒤집히기 때문이다.
+Weekday fromChrono(std::chrono::weekday day);
 
 }  // namespace domain

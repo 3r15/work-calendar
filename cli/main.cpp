@@ -1,6 +1,10 @@
+#include "cli/render.h"
 #include "core/app/data_dir.h"
+#include "core/app/day_view.h"
 #include "core/app/validate_service.h"
 #include "core/domain/finding.h"
+#include "core/storage/json_io.h"
+#include "core/util/clock.h"
 #include "platform/console.h"
 #include "platform/fileswap.h"
 #include "platform/paths.h"
@@ -31,32 +35,6 @@ int exitCodeFor(const util::Error& error) {
     }
 }
 
-// 무엇이 잘못됐고 어떻게 고치는지를 한 줄씩 (CLI-SPEC.md 오류 메시지).
-void printError(const util::Error& error) {
-    std::cerr << error.message << "\n";
-    if (!error.hint.empty()) {
-        std::cerr << error.hint << "\n";
-    }
-}
-
-void printReport(const domain::Report& report) {
-    if (report.empty()) {
-        std::cout << "문제를 찾지 못했습니다.\n";
-        return;
-    }
-
-    std::cout << "오류 " << report.errorCount() << "건, 경고 " << report.warningCount() << "건\n\n";
-    for (const domain::Finding& finding : report.findings()) {
-        const char* label =
-            (finding.severity == domain::Severity::Error) ? "[오류]" : "[경고]";
-        std::cout << label << " ";
-        if (!finding.where.empty()) {
-            std::cout << finding.where << " — ";
-        }
-        std::cout << finding.message << "\n";
-    }
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -74,11 +52,17 @@ int main(int argc, char** argv) {
                    "데이터 폴더. 기본값은 실행 파일 옆 ./data 입니다.");
 
     CLI::App* validate = app.add_subcommand("validate", "설정 파일의 정합성을 검사합니다.");
+    CLI::App* today = app.add_subcommand("today", "오늘의 시간대와 작업 구조를 보여줍니다.");
+
+    std::string dateOption;
+    today->add_option("--date", dateOption, "조회할 날짜 (YYYY-MM-DD). 기본값은 오늘입니다.");
+
     // 전역 옵션은 서브명령 앞뒤 어디에 와도 받아야 한다. fallthrough 가 없으면
     // "sched validate --data-dir X" 가 인자 오류로 떨어진다.
     validate->fallthrough();
+    today->fallthrough();
 
-    app.footer("아직 구현 중입니다. 현재는 validate 만 동작합니다.");
+    app.footer("아직 구현 중입니다. 현재는 validate 와 today 만 동작합니다.");
 
     // CLI11 은 파싱 결과를 예외로 알린다. 예외는 여기서 끝내고 안쪽으로 넘기지 않는다.
     try {
@@ -100,12 +84,36 @@ int main(int argc, char** argv) {
     if (validate->parsed()) {
         const util::Result<domain::Report> result = app::validateDataDir(dataDir);
         if (!result) {
-            printError(result.error());
+            cli::renderError(std::cerr, result.error());
             return exitCodeFor(result.error());
         }
-        printReport(result.value());
+        cli::renderReport(std::cout, result.value());
         // 경고만 있으면 실행은 가능하므로 성공으로 끝낸다.
         return result.value().hasErrors() ? kExitDataFile : kExitSuccess;
+    }
+
+    if (today->parsed()) {
+        const util::DateTime now = util::SystemClock{}.now();
+
+        util::Date date = now.date;
+        if (!dateOption.empty()) {
+            const std::optional<util::Date> parsed = util::Date::parse(dateOption);
+            if (!parsed.has_value()) {
+                std::cerr << "날짜 \"" << dateOption << "\" 를 읽을 수 없습니다.\n";
+                std::cerr << "\"2026-09-04\" 처럼 YYYY-MM-DD 형식으로 적어 주세요.\n";
+                return kExitInvalidUsage;
+            }
+            date = *parsed;
+        }
+
+        const util::Result<storage::LoadedModel> loaded = storage::loadModel(dataDir);
+        if (!loaded) {
+            cli::renderError(std::cerr, loaded.error());
+            return exitCodeFor(loaded.error());
+        }
+
+        cli::renderDayView(std::cout, app::buildDayView(loaded.value().model, date, now), now);
+        return kExitSuccess;
     }
 
     std::cout << app.help() << std::endl;

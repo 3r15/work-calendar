@@ -33,4 +33,9 @@ bool contains(const std::vector<Weekday>& days, Weekday day) {
     return std::find(days.begin(), days.end(), day) != days.end();
 }
 
+Weekday fromChrono(std::chrono::weekday day) {
+    // c_encoding() 은 일요일이 0 이다. Weekday::Sun 도 0 이므로 그대로 맞는다.
+    return static_cast<Weekday>(day.c_encoding());
+}
+
 }  // namespace domain

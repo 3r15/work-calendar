@@ -1,0 +1,109 @@
+#include "cli/render.h"
+
+#include "core/util/display_width.h"
+#include "core/util/korean.h"
+
+#include <algorithm>
+
+namespace cli {
+namespace {
+
+const char* weekdayLabelOf(const util::Date& date) {
+    static const char* kLabels[] = {"일", "월", "화", "수", "목", "금", "토"};
+    return kLabels[date.weekday().c_encoding()];
+}
+
+}  // namespace
+
+std::string padTo(const std::string& text, std::size_t width) {
+    const std::size_t used = util::displayWidth(text);
+    if (used >= width) {
+        return text;
+    }
+    return text + std::string(width - used, ' ');
+}
+
+void renderDayView(std::ostream& out, const app::DayView& view, const util::DateTime& now) {
+    out << view.date.toString() << " (" << weekdayLabelOf(view.date) << ")";
+    if (!view.workday) {
+        out << "  근무일이 아닙니다.";
+    }
+    out << "\n";
+
+    for (const app::SlotBlock& slot : view.slots) {
+        out << "\n" << slot.start << "–" << slot.end << "  " << slot.displayName;
+        if (slot.isCurrent) {
+            out << "  ◀ 지금";
+        } else if (slot.isPast) {
+            out << "  (지남)";
+        }
+        out << "\n";
+
+        // 분류가 하나뿐이면 이름을 한 번 더 보여줄 이유가 없다 (CLI-SPEC 출력 형식).
+        const bool showCategoryNames = slot.categories.size() > 1;
+        for (const app::CategoryBlock& category : slot.categories) {
+            if (showCategoryNames) {
+                out << "  " << category.displayName << "\n";
+            }
+            const std::string indent = showCategoryNames ? "    " : "  ";
+            for (const app::TaskSetBlock& set : category.taskSets) {
+                out << indent << "[" << set.displayName << "]\n";
+                if (set.tasks.empty()) {
+                    out << indent << "  (작업 없음)\n";
+                    continue;
+                }
+                // 이름 열의 너비를 표시 폭 기준으로 맞춘다.
+                std::size_t nameWidth = 0;
+                for (const app::TaskLine& task : set.tasks) {
+                    nameWidth = std::max(nameWidth, util::displayWidth(task.name));
+                }
+                for (const app::TaskLine& task : set.tasks) {
+                    out << indent << "  " << padTo(task.name, nameWidth + 2) << task.requiredCount
+                        << "명\n";
+                }
+            }
+        }
+    }
+
+    if (view.slots.empty()) {
+        out << "\n이 날에는 배정된 시간대가 없습니다.\n";
+    }
+
+    // 지금이 시간대 밖이면 다음에 오는 것을 안내한다 (D-003).
+    if (view.upcoming.has_value()) {
+        const app::UpcomingSlot& next = *view.upcoming;
+        out << "\n지금은 " << now.time.toString() << ", 배정된 시간대가 아닙니다.\n";
+        out << "다음: " << next.displayName;
+        if (!next.isToday) {
+            out << " (" << next.date.toString() << " " << next.start << " 시작)";
+        } else {
+            out << " (" << next.start << " 시작)";
+        }
+        out << "\n";
+    }
+}
+
+void renderReport(std::ostream& out, const domain::Report& report) {
+    if (report.empty()) {
+        out << "문제를 찾지 못했습니다.\n";
+        return;
+    }
+
+    out << "오류 " << report.errorCount() << "건, 경고 " << report.warningCount() << "건\n\n";
+    for (const domain::Finding& finding : report.findings()) {
+        out << ((finding.severity == domain::Severity::Error) ? "[오류] " : "[경고] ");
+        if (!finding.where.empty()) {
+            out << finding.where << " — ";
+        }
+        out << finding.message << "\n";
+    }
+}
+
+void renderError(std::ostream& out, const util::Error& error) {
+    out << error.message << "\n";
+    if (!error.hint.empty()) {
+        out << error.hint << "\n";
+    }
+}
+
+}  // namespace cli
