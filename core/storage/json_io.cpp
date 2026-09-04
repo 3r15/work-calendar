@@ -1,6 +1,7 @@
 #include "core/storage/json_io.h"
 
 #include "core/storage/atomic_write.h"
+#include "core/storage/migration.h"
 
 #include <nlohmann/json.hpp>
 
@@ -132,19 +133,9 @@ json weekdaysToJson(const std::vector<domain::Weekday>& days) {
     return out;
 }
 
-void checkVersion(const json& root, const std::string& where, domain::Report& report) {
-    const json* value = field(root, "version");
-    if (value == nullptr || !value->is_number_integer()) {
-        report.error(where, "version 필드가 없습니다. 이 파일이 이 프로그램의 데이터 파일이 "
-                            "맞는지 확인해 주세요.");
-        return;
-    }
-    const int version = value->get<int>();
-    if (version != domain::kSchemaVersion) {
-        report.error(where, "지원하지 않는 형식 버전입니다 (version " + std::to_string(version) +
-                                "). 이 프로그램은 " + std::to_string(domain::kSchemaVersion) +
-                                " 만 읽을 수 있습니다.");
-    }
+// 버전 확인과 올리기를 한곳에서 한다. 낮은 버전은 올리고, 높은 버전은 그렇게 알린다.
+void checkVersion(json& root, const std::string& where, domain::Report& report) {
+    migrateIfNeeded(root, where, report);
 }
 
 }  // namespace
@@ -158,7 +149,7 @@ util::Result<Loaded<domain::Config>> loadConfig(const std::filesystem::path& pat
     if (!parsed) {
         return parsed.error();
     }
-    const json& root = parsed.value();
+    json& root = parsed.value();
     const std::string where = filenames::kConfig;
 
     Loaded<domain::Config> out;
@@ -217,7 +208,7 @@ util::Result<Loaded<domain::WorkerList>> loadWorkers(const std::filesystem::path
     if (!parsed) {
         return parsed.error();
     }
-    const json& root = parsed.value();
+    json& root = parsed.value();
     const std::string where = filenames::kWorkers;
 
     Loaded<domain::WorkerList> out;
@@ -245,7 +236,7 @@ util::Result<Loaded<domain::TaskList>> loadTasks(const std::filesystem::path& pa
     if (!parsed) {
         return parsed.error();
     }
-    const json& root = parsed.value();
+    json& root = parsed.value();
     const std::string where = filenames::kTasks;
 
     Loaded<domain::TaskList> out;
@@ -293,7 +284,7 @@ util::Result<Loaded<domain::AbsenceList>> loadAbsences(const std::filesystem::pa
     if (!parsed) {
         return parsed.error();
     }
-    const json& root = parsed.value();
+    json& root = parsed.value();
 
     Loaded<domain::AbsenceList> out;
     checkVersion(root, filenames::kAbsences, out.report);
@@ -323,7 +314,7 @@ util::Result<Loaded<domain::DaySnapshot>> loadSnapshot(const std::filesystem::pa
     if (!parsed) {
         return parsed.error();
     }
-    const json& root = parsed.value();
+    json& root = parsed.value();
     const std::string where = path.filename().string();
 
     Loaded<domain::DaySnapshot> out;
@@ -381,7 +372,7 @@ util::Result<Loaded<domain::CursorState>> loadCursors(const std::filesystem::pat
     if (!parsed) {
         return parsed.error();
     }
-    const json& root = parsed.value();
+    json& root = parsed.value();
 
     Loaded<domain::CursorState> out;
     checkVersion(root, filenames::kCursors, out.report);

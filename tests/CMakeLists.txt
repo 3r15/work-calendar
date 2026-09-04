@@ -2,7 +2,10 @@ find_package(Catch2 3 REQUIRED)
 
 add_executable(sched_tests
     app/test_absence_service.cpp
+    app/test_admin_service.cpp
     app/test_assign_service.cpp
+    app/test_prune_service.cpp
+    app/test_update_service.cpp
     app/test_day_view.cpp
     domain/test_day_plan.cpp
     domain/test_validator.cpp
@@ -14,9 +17,12 @@ add_executable(sched_tests
     scheduling/test_weekday_filter.cpp
     storage/test_atomic_write.cpp
     storage/test_json_io.cpp
+    storage/test_lock.cpp
     util/test_date.cpp
     util/test_display_width.cpp
     util/test_korean.cpp
+    util/test_semver.cpp
+    util/test_sha256.cpp
     util/test_result.cpp
 )
 

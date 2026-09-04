@@ -40,6 +40,7 @@ add_subdirectory(core)
 if(NOT SCHED_CORE_ONLY)
     add_subdirectory(platform)
     add_subdirectory(cli)
+    add_subdirectory(updater)
 endif()
 
 if(SCHED_BUILD_TESTS)

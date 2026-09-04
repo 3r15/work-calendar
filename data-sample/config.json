@@ -49,7 +49,7 @@
   },
   "update": {
     "enabled": true,
-    "repo": "owner/scheduler",
+    "repo": "3r15/work-calendar",
     "checkIntervalHours": 24
   }
 }

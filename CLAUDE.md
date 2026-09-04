@@ -132,6 +132,6 @@ ctest --preset debug-core-only --output-on-failure
 
 ## 9. 진행 상황
 
-현재 Phase: **5 (CLI 완성)**
+현재 Phase: **8 (GUI 이식) — CLI v1.0 완료**
 
 Phase 를 마치면 `docs/ROADMAP.md` 의 체크박스를 채우고 이 줄을 갱신하세요.

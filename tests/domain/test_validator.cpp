@@ -165,11 +165,15 @@ TEST_CASE("catches an unknown weekday code", "[validator]") {
     REQUIRE(mentions(report, domain::Severity::Error, "MONDAY"));
 }
 
+// 방향에 따라 다른 말을 해야 한다. "지원하지 않는 버전" 만으로는 사용자가 무엇을 할지 모른다 —
+// 프로그램을 올려야 하는지, 파일이 잘못된 것인지 (DESIGN 7.2 마이그레이션 훅).
 TEST_CASE("catches an unsupported schema version", "[validator]") {
     BrokenData data{"bad_version"};
     data.patch("config.json", "\"version\": 1", "\"version\": 99");
     const domain::Report report = validateOf(data);
-    REQUIRE(mentions(report, domain::Severity::Error, "지원하지 않는 형식 버전"));
+    REQUIRE(report.hasErrors());
+    REQUIRE(mentions(report, domain::Severity::Error, "더 새로운 형식"));
+    REQUIRE(mentions(report, domain::Severity::Error, "99"));
 }
 
 // 첫 오류에서 멈추면 안 된다 (DATA-SCHEMA.md 검증 규칙).
