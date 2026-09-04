@@ -8,8 +8,11 @@ endif()
 
 add_library(sched_platform STATIC
     win/console_win.cpp
+    win/fileswap_win.cpp
+    win/paths_win.cpp
 )
 add_library(sched::platform ALIAS sched_platform)
 
 target_include_directories(sched_platform PUBLIC "${PROJECT_SOURCE_DIR}")
-target_link_libraries(sched_platform PUBLIC sched::options)
+# core 를 링크한다. 방향은 core <- platform 이며 그 반대는 금지다.
+target_link_libraries(sched_platform PUBLIC sched::core sched::options)

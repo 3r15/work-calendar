@@ -47,14 +47,14 @@ Phase 4~5 에서 `--worker 김철수` 같은 한글 인자로 다시 옵니다.
 
 ## Phase 1 — 도메인 모델과 저장
 
-- [ ] `core/domain/` 엔티티 (`Worker`, `Task`, `TaskSet`, `Category`, `TimeSlot`, `Absence`, `WorkCalendar`)
-- [ ] 강타입 ID 래퍼 (`WorkerId`, `TaskId`, `TaskSetId`, `CategoryId`, `TimeSlotId`)
-- [ ] `core/storage/json_io.h` — 5개 파일의 로드·저장
-- [ ] `storage::atomicWrite()` + `.bak` 백업 (플랫폼 호출은 `platform/fileswap.h` 뒤로)
-- [ ] `conflictsWith` 양방향 정규화
-- [ ] `core/domain/validator.h` — `DATA-SCHEMA.md` 의 오류·경고 규칙 전부
-- [ ] `sched validate` 명령
-- [ ] `data-sample/` 을 픽스처로 쓰는 테스트
+- [x] `core/domain/` 엔티티 (`Worker`, `Task`, `TaskSet`, `Category`, `TimeSlot`, `Absence`, `WorkCalendar`)
+- [x] 강타입 ID 래퍼 (`WorkerId`, `TaskId`, `TaskSetId`, `CategoryId`, `TimeSlotId`)
+- [x] `core/storage/json_io.h` — 5개 파일의 로드·저장
+- [x] `storage::atomicWrite()` + `.bak` 백업 (플랫폼 호출은 `platform/fileswap.h` 뒤로)
+- [x] `conflictsWith` 양방향 정규화
+- [x] `core/domain/validator.h` — `DATA-SCHEMA.md` 의 오류·경고 규칙 전부
+- [x] `sched validate` 명령
+- [x] `data-sample/` 을 픽스처로 쓰는 테스트
 
 **완료 기준**
 
@@ -62,6 +62,17 @@ Phase 4~5 에서 `--worker 김철수` 같은 한글 인자로 다시 옵니다.
 2. 일부러 망가뜨린 데이터 8종에 대해 `validate` 가 정확한 오류를 냄
 3. 쓰기 도중 중단을 시뮬레이션해도 원본이 손상되지 않음
 4. `cpp-reviewer` 에이전트 검사에서 심각 항목 없음
+
+**Phase 1 에서 더한 것**
+
+- `core/util/korean.h` — 받침에 따라 조사를 고릅니다. 오류 메시지에 작업 이름이 그대로 들어가는데
+  `작업 "밀대"이` 처럼 어긋나면 프로그램이 한국어를 모르는 것처럼 보입니다. 이름은 사용자 데이터라
+  실행 중에 골라야 합니다.
+- 날짜·시각 문자열의 모양 검사 — `from > to` 나 `start >= end` 비교가 뜻을 가지려면 형식이 먼저
+  맞아야 합니다. `DATA-SCHEMA.md` 의 규칙 목록에는 없지만 그 규칙들이 작동하기 위한 전제입니다.
+- 파싱 단계 발견(알 수 없는 요일 코드, `version` 범위)을 `storage` 가 `Report` 로 들고 나와
+  의미 검사 결과와 합칩니다. 첫 오류에서 멈추지 않는다는 요구를 지키려면 두 단계의 발견이 같은
+  보고서에 있어야 합니다.
 
 ---
 

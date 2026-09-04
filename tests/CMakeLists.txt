@@ -1,9 +1,17 @@
 find_package(Catch2 3 REQUIRED)
 
 add_executable(sched_tests
+    domain/test_validator.cpp
+    storage/test_atomic_write.cpp
+    storage/test_json_io.cpp
     util/test_display_width.cpp
+    util/test_korean.cpp
     util/test_result.cpp
 )
+
+# data-sample/ 을 픽스처로 쓴다 (CLAUDE.md 2장). 경로를 하드코딩하지 않는다.
+target_compile_definitions(sched_tests PRIVATE
+    SCHED_DATA_SAMPLE_DIR="${PROJECT_SOURCE_DIR}/data-sample")
 
 target_link_libraries(sched_tests PRIVATE
     sched::core
