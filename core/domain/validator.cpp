@@ -299,7 +299,9 @@ void checkWarnings(const Model& model, Report& report) {
     }
     for (const auto& [name, count] : nameCount) {
         if (count > 1) {
-            report.warn(kWorkersFile, "작업자 이름 \"" + name + "\" 이 " + std::to_string(count) +
+            report.warn(kWorkersFile, "작업자 이름 \"" + name + "\"" +
+                                          std::string{util::josaIGa(name)} + " " +
+                                          std::to_string(count) +
                                           "명 있습니다. 이름으로 지정할 때 ID 를 써야 합니다.");
         }
     }
@@ -347,11 +349,11 @@ void checkWarnings(const Model& model, Report& report) {
                 names += task->name;
             }
             if (required > activeCount) {
-                report.warn(kTasksFile, "작업집합 \"" + set.displayName + "\" 의 배타 그룹 (" +
-                                            names + ") 은 " + std::to_string(required) +
-                                            "명이 필요한데 활성 작업자는 " +
-                                            std::to_string(activeCount) +
-                                            "명입니다. 매일 미배정이 생깁니다.");
+                report.warn(kTasksFile,
+                            "작업집합 \"" + set.displayName + "\"의 배타 그룹 (" + names + ")" +
+                                std::string{util::josaEunNeun(names)} + " " +
+                                std::to_string(required) + "명이 필요한데 활성 작업자는 " +
+                                std::to_string(activeCount) + "명입니다. 매일 미배정이 생깁니다.");
             }
         }
     }
