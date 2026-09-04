@@ -140,7 +140,13 @@ util::Result<AssignOutcome> ensureSnapshot(const std::filesystem::path& dataDir,
     // 스냅샷을 먼저 쓴다. 커서 저장이 실패해도 그날 배정은 남는다 — 반대면 커서만 전진하고
     // 배정은 사라져 다음 날 배정이 어긋난다.
     if (const util::Result<void> written = storage::saveCursors(cursorPath, cursors); !written) {
-        return written.error();
+        // 여기까지 왔으면 스냅샷은 이미 디스크에 있다. "아무것도 안 됐다" 로 읽히면
+        // 사용자가 없는 문제를 찾게 되므로, 무엇이 되고 무엇이 안 됐는지 밝힌다.
+        return util::makeError(written.error().code,
+                               date.toString() + " 배정은 저장했지만 순번 기록에 실패했습니다.",
+                               "배정 결과는 그대로 쓸 수 있습니다. 다만 순번이 남지 않아 다음 "
+                               "번 배정이 오늘과 같은 사람부터 시작할 수 있습니다.\n" +
+                                   written.error().hint);
     }
     return outcome;
 }

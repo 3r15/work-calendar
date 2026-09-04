@@ -3,9 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <set>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
 namespace scheduling {
 namespace {
@@ -15,7 +13,6 @@ const RoundRobinPolicy& defaultPolicy() {
     static const RoundRobinPolicy kPolicy;
     return kPolicy;
 }
-
 
 using domain::Task;
 using domain::TaskId;
@@ -28,30 +25,31 @@ class ConflictGraph {
 public:
     explicit ConflictGraph(const std::vector<Task>& tasks) {
         for (const Task& task : tasks) {
-            edges_[task.id.str()];  // 배타가 없는 작업도 자리를 만들어 둔다
+            edges_[task.id];  // 배타가 없는 작업도 자리를 만들어 둔다
             for (const TaskId& other : task.conflictsWith) {
                 if (other == task.id) {
-                    continue;  // 자기 자신과의 배타는 암묵적이다
+                    // 자기 자신과의 배타는 암묵적이다. Ledger 가 같은 작업 재배정을 막는다.
+                    continue;
                 }
-                edges_[task.id.str()].insert(other.str());
-                edges_[other.str()].insert(task.id.str());
+                edges_[task.id].insert(other);
+                edges_[other].insert(task.id);
             }
         }
     }
 
-    bool conflicts(const std::string& a, const std::string& b) const {
+    bool conflicts(const TaskId& a, const TaskId& b) const {
         const auto it = edges_.find(a);
         return it != edges_.end() && it->second.count(b) > 0;
     }
 
-    const std::set<std::string>& neighbours(const std::string& id) const {
-        static const std::set<std::string> kEmpty;
+    const std::set<TaskId>& neighbours(const TaskId& id) const {
+        static const std::set<TaskId> kEmpty;
         const auto it = edges_.find(id);
         return (it != edges_.end()) ? it->second : kEmpty;
     }
 
 private:
-    std::map<std::string, std::set<std::string>> edges_;
+    std::map<TaskId, std::set<TaskId>> edges_;
 };
 
 // 이번 호출로 채울 작업. 작업집합에 속하고 그날 요일에 해당하는 것만.
@@ -83,28 +81,28 @@ struct Group {
 
 std::vector<Group> splitIntoGroups(const std::vector<const Task*>& tasks,
                                    const ConflictGraph& graph) {
-    std::unordered_map<std::string, std::size_t> indexOf;
+    std::map<TaskId, std::size_t> indexOf;
     for (std::size_t i = 0; i < tasks.size(); ++i) {
-        indexOf.emplace(tasks[i]->id.str(), i);
+        indexOf.emplace(tasks[i]->id, i);
     }
 
-    std::unordered_set<std::string> visited;
+    std::set<TaskId> visited;
     std::vector<Group> groups;
     for (const Task* start : tasks) {
-        if (visited.count(start->id.str()) > 0) {
+        if (visited.count(start->id) > 0) {
             continue;
         }
         // 연결 요소를 모은다. 대상 작업 밖으로는 나가지 않는다.
-        std::unordered_set<std::string> component;
-        std::vector<std::string> stack{start->id.str()};
+        std::set<TaskId> component;
+        std::vector<TaskId> stack{start->id};
         while (!stack.empty()) {
-            const std::string current = stack.back();
+            const TaskId current = stack.back();
             stack.pop_back();
             if (!visited.insert(current).second) {
                 continue;
             }
             component.insert(current);
-            for (const std::string& neighbour : graph.neighbours(current)) {
+            for (const TaskId& neighbour : graph.neighbours(current)) {
                 if (indexOf.count(neighbour) > 0 && visited.count(neighbour) == 0) {
                     stack.push_back(neighbour);
                 }
@@ -114,7 +112,7 @@ std::vector<Group> splitIntoGroups(const std::vector<const Task*>& tasks,
         Group group;
         group.firstIndex = tasks.size();
         for (std::size_t i = 0; i < tasks.size(); ++i) {
-            if (component.count(tasks[i]->id.str()) > 0) {
+            if (component.count(tasks[i]->id) > 0) {
                 group.tasks.push_back(tasks[i]);
                 group.requiredSum += std::max(tasks[i]->requiredCount, 0);
                 group.firstIndex = std::min(group.firstIndex, i);
@@ -124,6 +122,7 @@ std::vector<Group> splitIntoGroups(const std::vector<const Task*>& tasks,
     }
 
     // 필요 인원 합 내림차순. 같으면 그룹 내 첫 작업의 정의 순서.
+    // stable_sort 라 같은 입력이면 항상 같은 순서가 나온다.
     std::stable_sort(groups.begin(), groups.end(), [](const Group& a, const Group& b) {
         if (a.requiredSum != b.requiredSum) {
             return a.requiredSum > b.requiredSum;
@@ -134,26 +133,27 @@ std::vector<Group> splitIntoGroups(const std::vector<const Task*>& tasks,
 }
 
 // 배정 상태. 누가 어느 작업을 맡았는지와, 시간대 안에서 몇 건을 맡았는지.
+// 키를 강타입으로 두어 WorkerId 와 TaskId 를 바꿔 넣으면 컴파일이 막는다 (CLAUDE.md 7장).
 class Ledger {
 public:
-    void add(const std::string& taskId, const std::string& workerId) {
+    void add(const WorkerId& workerId, const TaskId& taskId) {
         byWorker_[workerId].insert(taskId);
         load_[workerId] += 1;
     }
 
-    bool holds(const std::string& workerId, const std::string& taskId) const {
+    bool holds(const WorkerId& workerId, const TaskId& taskId) const {
         const auto it = byWorker_.find(workerId);
         return it != byWorker_.end() && it->second.count(taskId) > 0;
     }
 
     // taskId 와 배타인 작업을 이미 맡고 있는가.
-    bool blockedBy(const std::string& workerId, const std::string& taskId,
+    bool blockedBy(const WorkerId& workerId, const TaskId& taskId,
                    const ConflictGraph& graph) const {
         const auto it = byWorker_.find(workerId);
         if (it == byWorker_.end()) {
             return false;
         }
-        for (const std::string& held : it->second) {
+        for (const TaskId& held : it->second) {
             if (graph.conflicts(held, taskId)) {
                 return true;
             }
@@ -161,14 +161,14 @@ public:
         return false;
     }
 
-    int load(const std::string& workerId) const {
+    int load(const WorkerId& workerId) const {
         const auto it = load_.find(workerId);
         return (it != load_.end()) ? it->second : 0;
     }
 
 private:
-    std::map<std::string, std::set<std::string>> byWorker_;
-    std::map<std::string, int> load_;
+    std::map<WorkerId, std::set<TaskId>> byWorker_;
+    std::map<WorkerId, int> load_;
 };
 
 }  // namespace
@@ -203,39 +203,38 @@ AssignResult AssignmentEngine::assign(const AssignInput& input) const {
     // 다른 집합의 선택을 좌우하면 "독립" 이 아니게 된다.
     if (input.options.crossSetConflicts) {
         for (const Assignment& prior : input.priorAssignments) {
-            ledger.add(prior.taskId.str(), prior.workerId.str());
+            ledger.add(prior.workerId, prior.taskId);
         }
     }
 
     const std::vector<const Task*> targets = targetTasks(input);
     for (const Group& group : splitIntoGroups(targets, graph)) {
         for (const Task* task : group.tasks) {
-            const std::string taskId = task->id.str();
             for (int filled = 0; filled < task->requiredCount; ++filled) {
-                // 커서 위치부터 한 바퀴 돌며 적격자를 모은다.
+                // 커서 위치부터 한 바퀴 돌며 가장 점수가 낮은 적격자를 고른다.
                 int chosen = -1;
-                int chosenLoad = 0;
+                int chosenScore = 0;
                 for (int step = 0; step < workerCount; ++step) {
                     const int index = (cursor + step) % workerCount;
-                    const std::string workerId =
-                        input.availableWorkers[static_cast<std::size_t>(index)].id.str();
+                    const domain::Worker& candidate =
+                        input.availableWorkers[static_cast<std::size_t>(index)];
 
-                    if (ledger.holds(workerId, taskId)) {
+                    if (ledger.holds(candidate.id, task->id)) {
                         continue;  // 모든 작업은 암묵적으로 자기 자신과 배타다
                     }
-                    if (ledger.blockedBy(workerId, taskId, graph)) {
+                    if (ledger.blockedBy(candidate.id, task->id, graph)) {
                         continue;
                     }
+
                     // 점수가 낮을수록 먼저. 같으면 커서에 가까운 사람이 이긴다 —
                     // 순회를 커서에서 시작하므로 먼저 만난 쪽을 유지하면 된다.
                     PolicyContext context;
                     context.cursorDistance = step;
-                    context.slotLoad = ledger.load(workerId);
-                    const int score = policy_->score(
-                        input.availableWorkers[static_cast<std::size_t>(index)], *task, context);
-                    if (chosen < 0 || score < chosenLoad) {
+                    context.slotLoad = ledger.load(candidate.id);
+                    const int score = policy_->score(candidate, *task, context);
+                    if (chosen < 0 || score < chosenScore) {
                         chosen = index;
-                        chosenLoad = score;
+                        chosenScore = score;
                     }
                 }
 
@@ -249,7 +248,7 @@ AssignResult AssignmentEngine::assign(const AssignInput& input) const {
                 const domain::Worker& worker =
                     input.availableWorkers[static_cast<std::size_t>(chosen)];
                 result.assignments.push_back(Assignment{task->id, worker.id});
-                ledger.add(taskId, worker.id.str());
+                ledger.add(worker.id, task->id);
                 cursor = (chosen + 1) % workerCount;
             }
         }
