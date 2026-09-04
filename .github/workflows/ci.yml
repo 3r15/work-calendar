@@ -19,17 +19,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 주석은 검사에서 뺀다. 왜 이 호출을 platform/ 뒤로 숨겼는지 설명하는 주석에
+      # ReplaceFileW 가 나오는 것은 정상이고, 오히려 있어야 하는 설명이다.
+      # 문제는 core/ 의 코드가 실제로 그 API 를 부르는 것이다.
+      # (제약: // 주석만 걷어낸다. core/ 는 블록 주석을 쓰지 않는다.)
       - name: core/ 에서 Windows API 사용 여부
         run: |
           if [ ! -d core ]; then
             echo "core/ 가 아직 없습니다 (Phase 0 이전). 건너뜁니다."
             exit 0
           fi
-          if grep -rn -i -E '(#[[:space:]]*include[[:space:]]*[<"]windows\.h)|WinHTTP|ReplaceFileW|_WIN32' core/; then
-            echo "::error::core/ 는 플랫폼 독립이어야 합니다. 위 코드를 platform/ 뒤로 옮기세요 (CLAUDE.md 1장)."
+          pattern='(#[[:space:]]*include[[:space:]]*[<"]windows\.h)|WinHTTP|ReplaceFileW|_WIN32'
+          found=0
+          while IFS= read -r -d '' file; do
+            if hits=$(sed 's://.*::' "$file" | grep -n -i -E "$pattern"); then
+              echo "::error file=$file::core/ 는 플랫폼 독립이어야 합니다. platform/ 뒤로 옮기세요 (CLAUDE.md 1장)."
+              echo "$hits" | sed "s|^|$file:|"
+              found=1
+            fi
+          done < <(find core -type f \( -name '*.h' -o -name '*.cpp' \) -print0)
+          if [ "$found" -ne 0 ]; then
             exit 1
           fi
-          echo "core/ 플랫폼 독립성 확인됨."
+          echo "core/ 플랫폼 독립성 확인됨 (주석 제외)."
 
       - name: 소스에 UTF-8 BOM 이 없는지
         run: |

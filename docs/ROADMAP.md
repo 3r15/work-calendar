@@ -47,14 +47,14 @@ Phase 4~5 에서 `--worker 김철수` 같은 한글 인자로 다시 옵니다.
 
 ## Phase 1 — 도메인 모델과 저장
 
-- [ ] `core/domain/` 엔티티 (`Worker`, `Task`, `TaskSet`, `Category`, `TimeSlot`, `Absence`, `WorkCalendar`)
-- [ ] 강타입 ID 래퍼 (`WorkerId`, `TaskId`, `TaskSetId`, `CategoryId`, `TimeSlotId`)
-- [ ] `core/storage/json_io.h` — 5개 파일의 로드·저장
-- [ ] `storage::atomicWrite()` + `.bak` 백업 (플랫폼 호출은 `platform/fileswap.h` 뒤로)
-- [ ] `conflictsWith` 양방향 정규화
-- [ ] `core/domain/validator.h` — `DATA-SCHEMA.md` 의 오류·경고 규칙 전부
-- [ ] `sched validate` 명령
-- [ ] `data-sample/` 을 픽스처로 쓰는 테스트
+- [x] `core/domain/` 엔티티 (`Worker`, `Task`, `TaskSet`, `Category`, `TimeSlot`, `Absence`, `WorkCalendar`)
+- [x] 강타입 ID 래퍼 (`WorkerId`, `TaskId`, `TaskSetId`, `CategoryId`, `TimeSlotId`)
+- [x] `core/storage/json_io.h` — 5개 파일의 로드·저장
+- [x] `storage::atomicWrite()` + `.bak` 백업 (플랫폼 호출은 `platform/fileswap.h` 뒤로)
+- [x] `conflictsWith` 양방향 정규화
+- [x] `core/domain/validator.h` — `DATA-SCHEMA.md` 의 오류·경고 규칙 전부
+- [x] `sched validate` 명령
+- [x] `data-sample/` 을 픽스처로 쓰는 테스트
 
 **완료 기준**
 
@@ -63,23 +63,41 @@ Phase 4~5 에서 `--worker 김철수` 같은 한글 인자로 다시 옵니다.
 3. 쓰기 도중 중단을 시뮬레이션해도 원본이 손상되지 않음
 4. `cpp-reviewer` 에이전트 검사에서 심각 항목 없음
 
+**Phase 1 에서 더한 것**
+
+- `core/util/korean.h` — 받침에 따라 조사를 고릅니다. 오류 메시지에 작업 이름이 그대로 들어가는데
+  `작업 "밀대"이` 처럼 어긋나면 프로그램이 한국어를 모르는 것처럼 보입니다. 이름은 사용자 데이터라
+  실행 중에 골라야 합니다.
+- 날짜·시각 문자열의 모양 검사 — `from > to` 나 `start >= end` 비교가 뜻을 가지려면 형식이 먼저
+  맞아야 합니다. `DATA-SCHEMA.md` 의 규칙 목록에는 없지만 그 규칙들이 작동하기 위한 전제입니다.
+- 파싱 단계 발견(알 수 없는 요일 코드, `version` 범위)을 `storage` 가 `Report` 로 들고 나와
+  의미 검사 결과와 합칩니다. 첫 오류에서 멈추지 않는다는 요구를 지키려면 두 단계의 발견이 같은
+  보고서에 있어야 합니다.
+
 ---
 
 ## Phase 2 — 날짜와 시간대
 
-- [ ] `core/util/date.h` — `std::chrono` 래퍼, 요일 판정, 파싱·포맷
-- [ ] 시스템 로컬 시각 조회 (플랫폼 독립. `std::chrono::current_zone()`)
-- [ ] "지금이 어느 시간대인가" 판정
-- [ ] 시간대에 속하지 않는 시각 → 다음 시간대 반환 (D-003)
-- [ ] 근무일·공휴일 판정
-- [ ] `sched today` — 배정 없이 구조만 출력
-- [ ] 시각을 주입할 수 있는 인터페이스 (테스트용 `IClock`)
+- [x] `core/util/date.h` — `std::chrono` 래퍼, 요일 판정, 파싱·포맷
+- [x] 시스템 로컬 시각 조회 (플랫폼 독립. `std::chrono::current_zone()`)
+- [x] "지금이 어느 시간대인가" 판정
+- [x] 시간대에 속하지 않는 시각 → 다음 시간대 반환 (D-003)
+- [x] 근무일·공휴일 판정
+- [x] `sched today` — 배정 없이 구조만 출력
+- [x] 시각을 주입할 수 있는 인터페이스 (테스트용 `IClock`)
 
 **완료 기준**
 
 1. 임의 시각 20개를 주입해 올바른 시간대를 반환하는 테스트 통과
 2. 경계값(시간대 시작 정각, 종료 정각, 자정) 동작이 문서와 일치
 3. 점심시간에 `today` 를 실행하면 다음 시간대 안내가 나옴
+
+**Phase 2 에서 정한 것**
+
+- 시간대 구간은 반열림 `[start, end)` 입니다. 문서에 정해져 있지 않던 것이라 `DECISIONS.md`
+  D-012 로 기록했습니다. 12:00 은 오전이 아니라 "다음은 평일 오후" 입니다.
+- `SystemClock` 은 시간대 데이터베이스가 없는 환경에서 UTC 로 떨어집니다. 시각이 어긋나는 것이
+  아예 실행되지 않는 것보다 낫다고 봤습니다.
 
 ---
 
