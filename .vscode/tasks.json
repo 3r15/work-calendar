@@ -1,0 +1,39 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "configure (debug)",
+      "type": "shell",
+      "command": "cmake --preset debug",
+      "problemMatcher": []
+    },
+    {
+      "label": "build (debug)",
+      "type": "shell",
+      "command": "cmake --build --preset debug",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$msCompile"]
+    },
+    {
+      "label": "test (debug)",
+      "type": "shell",
+      "command": "ctest --preset debug --output-on-failure",
+      "group": { "kind": "test", "isDefault": true },
+      "dependsOn": "build (debug)",
+      "problemMatcher": []
+    },
+    {
+      "label": "build (코어만 · 리눅스)",
+      "type": "shell",
+      "command": "cmake --preset debug-core-only && cmake --build --preset debug-core-only",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "test (코어만 · 리눅스)",
+      "type": "shell",
+      "command": "ctest --preset debug-core-only --output-on-failure",
+      "dependsOn": "build (코어만 · 리눅스)",
+      "problemMatcher": []
+    }
+  ]
+}

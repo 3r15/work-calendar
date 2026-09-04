@@ -1,0 +1,10 @@
+{
+  "name": "sched",
+  "version": "0.1.0",
+  "description": "작업 스케줄러",
+  "dependencies": [
+    "nlohmann-json",
+    "cli11",
+    "catch2"
+  ]
+}
