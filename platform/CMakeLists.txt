@@ -9,6 +9,7 @@ endif()
 add_library(sched_platform STATIC
     win/console_win.cpp
     win/fileswap_win.cpp
+    win/http_win.cpp
     win/paths_win.cpp
     win/process_win.cpp
 )
@@ -17,3 +18,6 @@ add_library(sched::platform ALIAS sched_platform)
 target_include_directories(sched_platform PUBLIC "${PROJECT_SOURCE_DIR}")
 # core 를 링크한다. 방향은 core <- platform 이며 그 반대는 금지다.
 target_link_libraries(sched_platform PUBLIC sched::core sched::options)
+
+# WinHTTP 는 OS 에 들어 있다. 추가로 배포할 것이 없다 (DESIGN 6.1).
+target_link_libraries(sched_platform PRIVATE winhttp)

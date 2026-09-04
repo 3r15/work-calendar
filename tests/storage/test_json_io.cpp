@@ -268,3 +268,45 @@ TEST_CASE("missing cursor file is reported as not found", "[json_io]") {
     REQUIRE_FALSE(loaded.ok());
     REQUIRE(loaded.error().code == util::ErrorCode::NotFound);
 }
+
+// 업데이트 뒤 첫 실행에서 스키마 버전을 확인한다 (DESIGN 7.2).
+TEST_CASE("reports a file written by a newer version differently", "[json_io]") {
+    const fs::path temp = fs::temp_directory_path() / "sched_test_version";
+    fs::remove_all(temp);
+    fs::create_directories(temp);
+
+    const auto write = [&temp](int version) {
+        std::ofstream out(temp / "absences.json");
+        out << "{\"version\": " << version << ", \"absences\": []}\n";
+    };
+
+    SECTION("더 새로운 형식이면 그렇게 알린다") {
+        write(99);
+        const auto loaded = storage::loadAbsences(temp / "absences.json");
+        REQUIRE(loaded.ok());  // 파싱은 된다. 문제는 보고서에 담긴다
+        REQUIRE(loaded.value().report.hasErrors());
+        bool mentioned = false;
+        for (const domain::Finding& finding : loaded.value().report.findings()) {
+            if (finding.message.find("더 새로운 형식") != std::string::npos) {
+                mentioned = true;
+            }
+        }
+        REQUIRE(mentioned);
+    }
+    SECTION("올릴 방법을 모르는 낮은 버전은 그렇게 알린다") {
+        // 지금은 1 이 최신이라 0 이하만 낮은 버전이다.
+        write(0);
+        const auto loaded = storage::loadAbsences(temp / "absences.json");
+        REQUIRE(loaded.ok());
+        REQUIRE(loaded.value().report.hasErrors());
+    }
+    SECTION("현재 버전이면 아무 말도 하지 않는다") {
+        write(1);
+        const auto loaded = storage::loadAbsences(temp / "absences.json");
+        REQUIRE(loaded.ok());
+        REQUIRE(loaded.value().report.empty());
+    }
+
+    std::error_code ec;
+    fs::remove_all(temp, ec);
+}

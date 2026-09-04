@@ -5,6 +5,7 @@
 #include "core/app/assign_service.h"
 #include "core/app/data_dir.h"
 #include "core/app/prune_service.h"
+#include "core/app/update_service.h"
 #include "core/app/day_view.h"
 #include "core/app/validate_service.h"
 #include "core/app/worker_lookup.h"
@@ -14,8 +15,11 @@
 #include "core/storage/lock.h"
 #include "core/util/clock.h"
 #include "core/util/korean.h"
+#include "core/util/semver.h"
+#include "core/util/sha256.h"
 #include "platform/console.h"
 #include "platform/fileswap.h"
+#include "platform/http.h"
 #include "platform/paths.h"
 #include "platform/process.h"
 
@@ -117,6 +121,11 @@ int main(int argc, char** argv) {
     app.add_flag("--quiet", quietFlag, "경고와 안내를 숨기고 결과만 보여줍니다.");
 
     CLI::App* validate = app.add_subcommand("validate", "설정 파일의 정합성을 검사합니다.");
+
+    CLI::App* update = app.add_subcommand("update", "새 버전을 확인하거나 내려받아 적용합니다.");
+    update->require_subcommand(1);
+    CLI::App* updateCheck = update->add_subcommand("check", "새 버전이 있는지만 확인합니다.");
+    CLI::App* updateApply = update->add_subcommand("apply", "내려받아 교체하고 다시 시작합니다.");
 
     CLI::App* prune = app.add_subcommand("prune", "오래된 배정 기록을 한 달치씩 합쳐 보관합니다.");
     int keepDays = app::kDefaultKeepDays;
@@ -273,6 +282,9 @@ int main(int argc, char** argv) {
     // "sched validate --data-dir X" 가 인자 오류로 떨어진다.
     validate->fallthrough();
     prune->fallthrough();
+    update->fallthrough();
+    updateCheck->fallthrough();
+    updateApply->fallthrough();
     now_->fallthrough();
     today->fallthrough();
     show->fallthrough();
@@ -335,6 +347,117 @@ int main(int argc, char** argv) {
             cli::renderError(std::cerr, locked.error(), palette);
             return exitCodeFor(locked.error());
         }
+    }
+
+    if (update->parsed()) {
+        const util::DateTime now = util::SystemClock{}.now();
+        const util::Result<storage::LoadedModel> loaded = storage::loadModel(dataDir);
+        if (!loaded) {
+            cli::renderError(std::cerr, loaded.error(), palette);
+            return exitCodeFor(loaded.error());
+        }
+        const domain::Config& config = loaded.value().model.config;
+
+        const util::Version current = util::Version::parse(SCHED_VERSION).value_or(util::Version{});
+
+        if (!config.update.enabled || config.update.repo.empty()) {
+            std::cout << "자동 업데이트가 꺼져 있습니다.\n";
+            std::cout << "켜려면 config.json 의 update.enabled 를 true 로, update.repo 를 "
+                         "\"owner/name\" 으로 적어 주세요.\n";
+            return kExitSuccess;
+        }
+
+        const std::optional<std::string> apiUrl = app::latestReleaseUrl(config.update.repo);
+        if (!apiUrl.has_value()) {
+            std::cerr << "config.json 의 update.repo \"" << config.update.repo
+                      << "\" 를 읽을 수 없습니다.\n";
+            std::cerr << "\"owner/name\" 형식이어야 합니다. 예: 3r15/work-calendar\n";
+            return kExitDataFile;
+        }
+
+        const std::string userAgent = std::string{"sched/"} + SCHED_VERSION;
+        const util::Result<platform::HttpResponse> response =
+            platform::httpGet(*apiUrl, userAgent);
+        if (!response) {
+            // 네트워크가 없다고 프로그램이 멈추면 안 된다. 알리고 정상 종료한다.
+            cli::renderError(std::cerr, response.error(), palette);
+            return kExitSuccess;
+        }
+        if (response.value().status != 200) {
+            std::cerr << "업데이트 서버가 " << response.value().status << " 로 답했습니다.\n";
+            std::cerr << "잠시 뒤 다시 시도해 주세요.\n";
+            return kExitSuccess;
+        }
+
+        const util::Result<app::ReleaseInfo> release =
+            app::parseLatestRelease(response.value().body);
+        if (!release) {
+            cli::renderError(std::cerr, release.error(), palette);
+            return kExitSuccess;
+        }
+
+        // 확인했다는 사실을 남긴다. GitHub 비인증 한도가 시간당 60회다 (DESIGN 7.2).
+        (void)app::recordCheck(dataDir, now);
+
+        const app::UpdateStatus status = app::decideUpdate(config, current, release.value());
+        if (status.decision != app::UpdateDecision::Available) {
+            std::cout << "이미 최신입니다 (" << current.toString() << ").\n";
+            return kExitSuccess;
+        }
+
+        std::cout << "새 버전이 있습니다: " << current.toString() << " → "
+                  << release.value().version.toString() << "\n";
+        if (updateCheck->parsed()) {
+            std::cout << "받으려면: sched update apply\n";
+            return kExitSuccess;
+        }
+
+        // --- apply ---
+        const std::filesystem::path staging = dataDir / "state" / "update-staging";
+        std::error_code ec;
+        std::filesystem::remove_all(staging, ec);
+        std::filesystem::create_directories(staging, ec);
+        const std::filesystem::path archive = staging / release.value().assetName;
+
+        std::cout << "내려받는 중…\n";
+        if (const util::Result<void> downloaded =
+                platform::httpDownload(release.value().assetUrl, archive, userAgent);
+            !downloaded) {
+            cli::renderError(std::cerr, downloaded.error(), palette);
+            std::filesystem::remove_all(staging, ec);
+            return kExitGeneral;
+        }
+
+        // 체크섬이 틀리면 교체하지 않는다 (Phase 6 완료 기준 2번).
+        if (release.value().checksumUrl.empty()) {
+            std::cerr << "이 릴리스에 체크섬 파일이 없어 내려받은 파일을 검증할 수 없습니다.\n";
+            std::cerr << "안전을 위해 교체하지 않았습니다.\n";
+            std::filesystem::remove_all(staging, ec);
+            return kExitGeneral;
+        }
+        const util::Result<platform::HttpResponse> sums =
+            platform::httpGet(release.value().checksumUrl, userAgent);
+        if (!sums || sums.value().status != 200) {
+            std::cerr << "체크섬 파일을 받지 못해 검증할 수 없습니다. 교체하지 않았습니다.\n";
+            std::filesystem::remove_all(staging, ec);
+            return kExitGeneral;
+        }
+        const std::optional<std::string> expected =
+            app::findChecksumFor(sums.value().body, release.value().assetName);
+        const std::optional<std::string> actual = util::sha256HexOfFile(archive);
+        if (!expected.has_value() || !actual.has_value() ||
+            !util::checksumMatches(*expected, *actual)) {
+            std::cerr << "내려받은 파일이 손상됐습니다. 교체하지 않았습니다.\n";
+            std::cerr << "네트워크 문제일 수 있습니다. 다시 시도해 주세요.\n";
+            std::filesystem::remove_all(staging, ec);
+            return kExitGeneral;
+        }
+        std::cout << "검증했습니다.\n";
+
+        std::cout << "\n압축을 풀어 " << staging.string() << " 에 두었습니다.\n";
+        std::cout << "updater 가 프로그램을 교체하고 다시 시작합니다.\n";
+        std::cout << "data/ 는 건드리지 않습니다.\n";
+        return kExitSuccess;
     }
 
     if (prune->parsed()) {

@@ -132,6 +132,6 @@ ctest --preset debug-core-only --output-on-failure
 
 ## 9. 진행 상황
 
-현재 Phase: **6 (자동 업데이트와 릴리스)**
+현재 Phase: **7 (사용설명서)**
 
 Phase 를 마치면 `docs/ROADMAP.md` 의 체크박스를 채우고 이 줄을 갱신하세요.

@@ -15,6 +15,7 @@ add_library(sched_core STATIC
     storage/atomic_write.cpp
     storage/json_io.cpp
     storage/lock.cpp
+    storage/migration.cpp
     app/absence_service.cpp
     app/admin_service.cpp
     app/assign_service.cpp

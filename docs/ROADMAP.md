@@ -215,14 +215,14 @@ Phase 4~5 에서 `--worker 김철수` 같은 한글 인자로 다시 옵니다.
 
 ## Phase 6 — 자동 업데이트와 릴리스
 
-- [ ] `platform/http.h` + WinHTTP 구현
-- [ ] GitHub Releases API 호출, semver 비교
-- [ ] asset 다운로드 + SHA256 검증
-- [ ] `updater.exe` — 부모 프로세스 종료 대기 → 교체 → 재실행
-- [ ] 하루 1회 확인 제한 (`state/` 에 마지막 확인 시각)
-- [ ] `sched update check|apply`
-- [ ] 스키마 마이그레이션 훅
-- [ ] `.github/workflows/release.yml` 로 `v0.1.0` 첫 릴리스
+- [x] `platform/http.h` + WinHTTP 구현
+- [x] GitHub Releases API 호출, semver 비교
+- [x] asset 다운로드 + SHA256 검증
+- [x] `updater.exe` — 부모 프로세스 종료 대기 → 교체 → 재실행
+- [x] 하루 1회 확인 제한 (`state/` 에 마지막 확인 시각)
+- [x] `sched update check|apply`
+- [x] 스키마 마이그레이션 훅
+- [ ] `.github/workflows/release.yml` 로 `v0.1.0` 첫 릴리스 ← **사람이 태그를 붙여야 합니다**
 
 **완료 기준**
 
@@ -230,6 +230,25 @@ Phase 4~5 에서 `--worker 김철수` 같은 한글 인자로 다시 옵니다.
 2. 체크섬이 틀리면 교체하지 않고 중단
 3. 네트워크가 없어도 프로그램이 정상 시작
 4. 업데이트 후 `data/` 가 그대로 남아 있음
+
+**이 환경에서 확인할 수 없는 것**
+
+Phase 6 은 완료 기준을 리눅스 컨테이너에서 검증할 수 없습니다. 정직하게 나눠 둡니다.
+
+| 항목 | 상태 |
+|---|---|
+| semver 비교 | ✅ 테스트로 검증 |
+| SHA-256 | ✅ 공개된 FIPS 180-4 시험값과 일치 |
+| 릴리스 JSON 해석, 하루 1회 제한 | ✅ 테스트로 검증 |
+| 3번 (네트워크 없어도 정상) | ✅ 실패를 Result 로 받아 안내 후 종료 코드 0 |
+| WinHTTP 구현 | ⏳ CI 의 Windows 잡이 **컴파일**만 확인 |
+| 1번 (감지·교체·재실행), 2번, 4번 | ⏳ **Windows PC 에서 두 버전으로 실제 확인 필요** |
+
+2번(체크섬 불일치 시 중단)은 코드 경로가 있고 `util::checksumMatches` 는 테스트되지만,
+실제 릴리스를 상대로 확인한 것은 아닙니다.
+
+**첫 릴리스는 사람이 결정합니다.** `v0.1.0` 태그를 붙이면 `release.yml` 이 빌드·zip·SHA256·
+발행을 합니다. 태그를 붙이는 것은 되돌리기 어렵고 공개되는 일이라 자동으로 하지 않았습니다.
 
 **주의** — Windows 는 실행 중인 exe 를 덮어쓸 수 없습니다. `updater.exe` 를 별도 프로세스로 두는 구조를 처음부터 잡으세요.
 
