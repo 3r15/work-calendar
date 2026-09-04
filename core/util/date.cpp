@@ -83,6 +83,17 @@ std::optional<TimeOfDay> TimeOfDay::parse(std::string_view text) {
     return TimeOfDay::fromHm(hour, minute);
 }
 
+std::string formatIso8601(const DateTime& moment) {
+    const int offset = moment.utcOffsetMinutes;
+    const char sign = (offset < 0) ? '-' : '+';
+    const int absOffset = (offset < 0) ? -offset : offset;
+
+    char buffer[40];
+    std::snprintf(buffer, sizeof(buffer), "%sT%s:00%c%02d:%02d", moment.date.toString().c_str(),
+                  moment.time.toString().c_str(), sign, absOffset / 60, absOffset % 60);
+    return std::string{buffer};
+}
+
 std::string TimeOfDay::toString() const {
     char buffer[8];
     std::snprintf(buffer, sizeof(buffer), "%02d:%02d", hour(), minute());

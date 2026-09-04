@@ -1,5 +1,6 @@
 #include "core/app/day_view.h"
 
+#include "core/domain/availability.h"
 #include "core/domain/day_plan.h"
 
 #include <algorithm>
@@ -26,11 +27,43 @@ const domain::Category* findCategory(const domain::Config& config,
     return nullptr;
 }
 
+// 스냅샷에서 이 시간대·분류·작업집합에 해당하는 항목을 찾는다.
+const domain::SnapshotTaskSet* findSnapshotSet(const domain::DaySnapshot* snapshot,
+                                               const domain::TimeSlotId& slotId,
+                                               const domain::CategoryId& categoryId,
+                                               const domain::TaskSetId& setId) {
+    if (snapshot == nullptr) {
+        return nullptr;
+    }
+    for (const domain::SnapshotSlot& slot : snapshot->slots) {
+        if (!(slot.timeSlotId == slotId) || !(slot.categoryId == categoryId)) {
+            continue;
+        }
+        for (const domain::SnapshotTaskSet& set : slot.taskSets) {
+            if (set.taskSetId == setId) {
+                return &set;
+            }
+        }
+    }
+    return nullptr;
+}
+
+std::string workerNameOf(const domain::Model& model, const domain::WorkerId& id) {
+    for (const domain::Worker& worker : model.workers.workers) {
+        if (worker.id == id) {
+            return worker.name;
+        }
+    }
+    // 지워진 작업자를 과거 스냅샷이 가리킬 수 있다. ID 라도 보여준다.
+    return id.str();
+}
+
 // 작업집합에 속하면서 그날 요일에 해당하는 작업. 정의 순서를 지킨다 — 배정 순서와 같아야 한다.
-std::vector<TaskLine> tasksIn(const domain::TaskList& tasks, const domain::TaskSetId& setId,
-                              domain::Weekday day) {
+std::vector<TaskLine> tasksIn(const domain::Model& model, const domain::TaskSetId& setId,
+                              domain::Weekday day, const util::Date& date,
+                              const domain::SnapshotTaskSet* snapshotSet) {
     std::vector<TaskLine> out;
-    for (const domain::Task& task : tasks.tasks) {
+    for (const domain::Task& task : model.tasks.tasks) {
         const bool inSet = std::find(task.taskSetIds.begin(), task.taskSetIds.end(), setId) !=
                            task.taskSetIds.end();
         if (!inSet) {
@@ -40,7 +73,29 @@ std::vector<TaskLine> tasksIn(const domain::TaskList& tasks, const domain::TaskS
         if (!task.weekdays.empty() && !domain::contains(task.weekdays, day)) {
             continue;
         }
-        out.push_back(TaskLine{task.name, task.requiredCount});
+
+        TaskLine line;
+        line.name = task.name;
+        line.requiredCount = task.requiredCount;
+
+        if (snapshotSet != nullptr) {
+            for (const domain::SnapshotAssignment& assignment : snapshotSet->assignments) {
+                if (!(assignment.taskId == task.id)) {
+                    continue;
+                }
+                AssignedWorker worker;
+                worker.name = workerNameOf(model, assignment.workerId);
+                // 저장된 absentAssignee 를 믿지 않고 지금 다시 판정한다 (D-009).
+                worker.absent = domain::isAbsentOn(model, assignment.workerId, date);
+                line.workers.push_back(std::move(worker));
+            }
+            for (const domain::SnapshotUnassigned& item : snapshotSet->unassigned) {
+                if (item.taskId == task.id) {
+                    line.unassignedCount += item.count;
+                }
+            }
+        }
+        out.push_back(std::move(line));
     }
     return out;
 }
@@ -48,7 +103,7 @@ std::vector<TaskLine> tasksIn(const domain::TaskList& tasks, const domain::TaskS
 }  // namespace
 
 DayView buildDayView(const domain::Model& model, const util::Date& date,
-                     const util::DateTime& now) {
+                     const util::DateTime& now, const domain::DaySnapshot* snapshot) {
     DayView view;
     view.date = date;
     view.workday = domain::isWorkday(model.config, date);
@@ -59,6 +114,7 @@ DayView buildDayView(const domain::Model& model, const util::Date& date,
 
     for (const domain::TimeSlot* slot : domain::slotsForDate(model.config, date)) {
         SlotBlock block;
+        block.id = slot->id;
         block.displayName = slot->displayName;
         block.start = slot->start;
         block.end = slot->end;
@@ -76,6 +132,7 @@ DayView buildDayView(const domain::Model& model, const util::Date& date,
                 continue;  // 없는 참조는 validator 가 오류로 보고한다
             }
             CategoryBlock categoryBlock;
+            categoryBlock.id = category->id;
             categoryBlock.displayName = category->displayName;
             for (const domain::TaskSetId& setId : category->taskSetIds) {
                 const domain::TaskSet* set = findTaskSet(model.tasks, setId);
@@ -84,7 +141,8 @@ DayView buildDayView(const domain::Model& model, const util::Date& date,
                 }
                 TaskSetBlock setBlock;
                 setBlock.displayName = set->displayName;
-                setBlock.tasks = tasksIn(model.tasks, setId, day);
+                setBlock.tasks = tasksIn(model, setId, day, date,
+                                         findSnapshotSet(snapshot, slot->id, category->id, setId));
                 categoryBlock.taskSets.push_back(std::move(setBlock));
             }
             block.categories.push_back(std::move(categoryBlock));

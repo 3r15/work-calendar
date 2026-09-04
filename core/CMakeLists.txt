@@ -5,11 +5,16 @@
 find_package(nlohmann_json CONFIG REQUIRED)
 
 add_library(sched_core STATIC
+    domain/availability.cpp
     domain/day_plan.cpp
+    domain/snapshot.cpp
     domain/validator.cpp
     domain/weekday.cpp
+    scheduling/assignment_engine.cpp
+    scheduling/policy.cpp
     storage/atomic_write.cpp
     storage/json_io.cpp
+    app/assign_service.cpp
     app/data_dir.cpp
     app/day_view.cpp
     app/validate_service.cpp

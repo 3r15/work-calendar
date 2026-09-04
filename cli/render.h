@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/app/assign_service.h"
 #include "core/app/day_view.h"
 #include "core/domain/finding.h"
 #include "core/util/date.h"
@@ -12,6 +13,7 @@ namespace cli {
 // 렌더링만 한다. 계산은 core/app 이 끝낸 상태로 들어온다 (CLAUDE.md 2장).
 
 void renderDayView(std::ostream& out, const app::DayView& view, const util::DateTime& now);
+void renderAssignOutcome(std::ostream& out, const app::AssignOutcome& outcome);
 void renderReport(std::ostream& out, const domain::Report& report);
 void renderError(std::ostream& out, const util::Error& error);
 

@@ -1,4 +1,5 @@
 #include "cli/render.h"
+#include "core/app/assign_service.h"
 #include "core/app/data_dir.h"
 #include "core/app/day_view.h"
 #include "core/app/validate_service.h"
@@ -52,17 +53,20 @@ int main(int argc, char** argv) {
                    "데이터 폴더. 기본값은 실행 파일 옆 ./data 입니다.");
 
     CLI::App* validate = app.add_subcommand("validate", "설정 파일의 정합성을 검사합니다.");
-    CLI::App* today = app.add_subcommand("today", "오늘의 시간대와 작업 구조를 보여줍니다.");
+    CLI::App* today = app.add_subcommand("today", "오늘의 배정을 보여줍니다.");
+    CLI::App* assign = app.add_subcommand("assign", "그날의 배정을 계산해 저장합니다.");
 
     std::string dateOption;
     today->add_option("--date", dateOption, "조회할 날짜 (YYYY-MM-DD). 기본값은 오늘입니다.");
+    assign->add_option("--date", dateOption, "배정할 날짜 (YYYY-MM-DD). 기본값은 오늘입니다.");
 
     // 전역 옵션은 서브명령 앞뒤 어디에 와도 받아야 한다. fallthrough 가 없으면
     // "sched validate --data-dir X" 가 인자 오류로 떨어진다.
     validate->fallthrough();
     today->fallthrough();
+    assign->fallthrough();
 
-    app.footer("아직 구현 중입니다. 현재는 validate 와 today 만 동작합니다.");
+    app.footer("아직 구현 중입니다. 현재는 validate, today, assign 만 동작합니다.");
 
     // CLI11 은 파싱 결과를 예외로 알린다. 예외는 여기서 끝내고 안쪽으로 넘기지 않는다.
     try {
@@ -92,14 +96,14 @@ int main(int argc, char** argv) {
         return result.value().hasErrors() ? kExitDataFile : kExitSuccess;
     }
 
-    if (today->parsed()) {
+    if (today->parsed() || assign->parsed()) {
         const util::DateTime now = util::SystemClock{}.now();
 
         util::Date date = now.date;
         if (!dateOption.empty()) {
             const std::optional<util::Date> parsed = util::Date::parse(dateOption);
             if (!parsed.has_value()) {
-                std::cerr << "날짜 \"" << dateOption << "\" 를 읽을 수 없습니다.\n";
+                std::cerr << "날짜 \"" << dateOption << "\"를 읽을 수 없습니다.\n";
                 std::cerr << "\"2026-09-04\" 처럼 YYYY-MM-DD 형식으로 적어 주세요.\n";
                 return kExitInvalidUsage;
             }
@@ -111,8 +115,23 @@ int main(int argc, char** argv) {
             cli::renderError(std::cerr, loaded.error());
             return exitCodeFor(loaded.error());
         }
+        const domain::Model& model = loaded.value().model;
 
-        cli::renderDayView(std::cout, app::buildDayView(loaded.value().model, date, now), now);
+        // 그날 스냅샷이 없으면 계산해서 저장하고, 있으면 읽기만 한다 (DESIGN 3.1).
+        const util::Result<app::AssignOutcome> outcome =
+            app::ensureSnapshot(dataDir, model, date, now);
+        if (!outcome) {
+            cli::renderError(std::cerr, outcome.error());
+            return exitCodeFor(outcome.error());
+        }
+
+        if (assign->parsed()) {
+            cli::renderAssignOutcome(std::cout, outcome.value());
+            return kExitSuccess;
+        }
+
+        cli::renderDayView(std::cout,
+                           app::buildDayView(model, date, now, &outcome.value().snapshot), now);
         return kExitSuccess;
     }
 

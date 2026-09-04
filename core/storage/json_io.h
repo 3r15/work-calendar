@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/domain/entities.h"
+#include "core/domain/snapshot.h"
 #include "core/domain/finding.h"
 #include "core/util/result.h"
 
@@ -17,6 +18,9 @@ inline constexpr const char* kTasks = "tasks.json";
 inline constexpr const char* kAbsences = "absences.json";
 inline constexpr const char* kCursors = "state/rr-cursor.json";
 }  // namespace filenames
+
+// state/assign-YYYY-MM-DD.json
+std::filesystem::path snapshotPath(const std::filesystem::path& dataDir, const std::string& date);
 
 // 로드 결과. 파일을 읽는 도중 발견한 문제는 예외가 아니라 findings 로 모은다.
 //
@@ -36,12 +40,14 @@ util::Result<Loaded<domain::WorkerList>> loadWorkers(const std::filesystem::path
 util::Result<Loaded<domain::TaskList>> loadTasks(const std::filesystem::path& path);
 util::Result<Loaded<domain::AbsenceList>> loadAbsences(const std::filesystem::path& path);
 util::Result<Loaded<domain::CursorState>> loadCursors(const std::filesystem::path& path);
+util::Result<Loaded<domain::DaySnapshot>> loadSnapshot(const std::filesystem::path& path);
 
 util::Result<void> saveConfig(const std::filesystem::path& path, const domain::Config& value);
 util::Result<void> saveWorkers(const std::filesystem::path& path, const domain::WorkerList& value);
 util::Result<void> saveTasks(const std::filesystem::path& path, const domain::TaskList& value);
 util::Result<void> saveAbsences(const std::filesystem::path& path, const domain::AbsenceList& value);
 util::Result<void> saveCursors(const std::filesystem::path& path, const domain::CursorState& value);
+util::Result<void> saveSnapshot(const std::filesystem::path& path, const domain::DaySnapshot& value);
 
 // 데이터 폴더 하나를 통째로 읽는다. rr-cursor.json 은 없어도 정상이므로 포함하지 않는다.
 struct LoadedModel {
@@ -60,5 +66,6 @@ std::string toJsonText(const domain::WorkerList& value);
 std::string toJsonText(const domain::TaskList& value);
 std::string toJsonText(const domain::AbsenceList& value);
 std::string toJsonText(const domain::CursorState& value);
+std::string toJsonText(const domain::DaySnapshot& value);
 
 }  // namespace storage

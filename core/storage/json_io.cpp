@@ -313,6 +313,69 @@ util::Result<Loaded<domain::AbsenceList>> loadAbsences(const std::filesystem::pa
     return out;
 }
 
+std::filesystem::path snapshotPath(const std::filesystem::path& dataDir,
+                                   const std::string& date) {
+    return dataDir / "state" / ("assign-" + date + ".json");
+}
+
+util::Result<Loaded<domain::DaySnapshot>> loadSnapshot(const std::filesystem::path& path) {
+    util::Result<json> parsed = parseJson(path);
+    if (!parsed) {
+        return parsed.error();
+    }
+    const json& root = parsed.value();
+    const std::string where = path.filename().string();
+
+    Loaded<domain::DaySnapshot> out;
+    checkVersion(root, where, out.report);
+    out.value.version = getInt(root, "version", domain::kSchemaVersion);
+    out.value.date = getString(root, "date");
+    out.value.generatedAt = getString(root, "generatedAt");
+    if (const std::optional<domain::Weekday> day = domain::parseWeekday(getString(root, "weekday"))) {
+        out.value.weekday = *day;
+    }
+
+    if (const json* slots = field(root, "slots")) {
+        for (const json& slotJson : *slots) {
+            domain::SnapshotSlot slot;
+            slot.timeSlotId = domain::TimeSlotId{getString(slotJson, "timeSlotId")};
+            slot.categoryId = domain::CategoryId{getString(slotJson, "categoryId")};
+            if (const json* sets = field(slotJson, "taskSets")) {
+                for (const json& setJson : *sets) {
+                    domain::SnapshotTaskSet set;
+                    set.taskSetId = domain::TaskSetId{getString(setJson, "taskSetId")};
+                    if (const json* items = field(setJson, "assignments")) {
+                        for (const json& item : *items) {
+                            domain::SnapshotAssignment assignment;
+                            assignment.taskId = domain::TaskId{getString(item, "taskId")};
+                            assignment.workerId = domain::WorkerId{getString(item, "workerId")};
+                            assignment.absentAssignee = getBool(item, "absentAssignee", false);
+                            assignment.done = getBool(item, "done", false);
+                            if (const json* doneAt = field(item, "doneAt")) {
+                                if (doneAt->is_string()) {
+                                    assignment.doneAt = doneAt->get<std::string>();
+                                }
+                            }
+                            set.assignments.push_back(std::move(assignment));
+                        }
+                    }
+                    if (const json* items = field(setJson, "unassigned")) {
+                        for (const json& item : *items) {
+                            domain::SnapshotUnassigned unassigned;
+                            unassigned.taskId = domain::TaskId{getString(item, "taskId")};
+                            unassigned.count = getInt(item, "count", 0);
+                            set.unassigned.push_back(unassigned);
+                        }
+                    }
+                    slot.taskSets.push_back(std::move(set));
+                }
+            }
+            out.value.slots.push_back(std::move(slot));
+        }
+    }
+    return out;
+}
+
 util::Result<Loaded<domain::CursorState>> loadCursors(const std::filesystem::path& path) {
     util::Result<json> parsed = parseJson(path);
     if (!parsed) {
@@ -455,6 +518,54 @@ std::string toJsonText(const domain::CursorState& value) {
         root["cursors"][id.str()] = cursor;
     }
     return root.dump(2) + "\n";
+}
+
+std::string toJsonText(const domain::DaySnapshot& value) {
+    json root;
+    root["version"] = value.version;
+    root["date"] = value.date;
+    root["weekday"] = domain::formatWeekday(value.weekday);
+    root["generatedAt"] = value.generatedAt;
+    root["slots"] = json::array();
+    for (const domain::SnapshotSlot& slot : value.slots) {
+        json slotJson;
+        slotJson["timeSlotId"] = slot.timeSlotId.str();
+        slotJson["categoryId"] = slot.categoryId.str();
+        slotJson["taskSets"] = json::array();
+        for (const domain::SnapshotTaskSet& set : slot.taskSets) {
+            json setJson;
+            setJson["taskSetId"] = set.taskSetId.str();
+            setJson["assignments"] = json::array();
+            for (const domain::SnapshotAssignment& assignment : set.assignments) {
+                json item;
+                item["taskId"] = assignment.taskId.str();
+                item["workerId"] = assignment.workerId.str();
+                item["absentAssignee"] = assignment.absentAssignee;
+                item["done"] = assignment.done;
+                if (assignment.doneAt.has_value()) {
+                    item["doneAt"] = *assignment.doneAt;
+                } else {
+                    item["doneAt"] = nullptr;
+                }
+                setJson["assignments"].push_back(std::move(item));
+            }
+            setJson["unassigned"] = json::array();
+            for (const domain::SnapshotUnassigned& unassigned : set.unassigned) {
+                json item;
+                item["taskId"] = unassigned.taskId.str();
+                item["count"] = unassigned.count;
+                setJson["unassigned"].push_back(std::move(item));
+            }
+            slotJson["taskSets"].push_back(std::move(setJson));
+        }
+        root["slots"].push_back(std::move(slotJson));
+    }
+    return root.dump(2) + "\n";
+}
+
+util::Result<void> saveSnapshot(const std::filesystem::path& path,
+                                const domain::DaySnapshot& value) {
+    return atomicWrite(path, toJsonText(value));
 }
 
 util::Result<void> saveConfig(const std::filesystem::path& path, const domain::Config& value) {
