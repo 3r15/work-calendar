@@ -6,16 +6,16 @@
 
 ## Phase 0 — 프로젝트 골격
 
-- [ ] CMakeLists.txt (core / platform / cli / tests 타겟)
-- [ ] CMakePresets.json 은 이미 제공됨. 프리셋 이름에 맞춰 구성
-- [ ] vcpkg.json 매니페스트 (nlohmann-json, cli11, catch2)
-- [ ] VSCode `.vscode/` 설정 (tasks, launch, c_cpp_properties)
-- [ ] MSVC `/utf-8` 플래그, GCC/Clang 경고 옵션
-- [ ] `platform/console.h` + Windows 구현 — `initConsole()`, `enableAnsi()`
-- [ ] `core/util/display_width.h` — East Asian Width 기반 폭 계산
-- [ ] `core/util/result.h` — 오류 반환 타입
-- [ ] `tests/util/test_display_width.cpp`
-- [ ] `sched --version` 이 동작
+- [x] CMakeLists.txt (core / platform / cli / tests 타겟)
+- [x] CMakePresets.json 은 이미 제공됨. 프리셋 이름에 맞춰 구성
+- [x] vcpkg.json 매니페스트 (nlohmann-json, cli11, catch2)
+- [x] VSCode `.vscode/` 설정 (tasks, launch, c_cpp_properties)
+- [x] MSVC `/utf-8` 플래그, GCC/Clang 경고 옵션
+- [x] `platform/console.h` + Windows 구현 — `initConsole()`, `enableAnsi()`
+- [x] `core/util/display_width.h` — East Asian Width 기반 폭 계산
+- [x] `core/util/result.h` — 오류 반환 타입
+- [x] `tests/util/test_display_width.cpp`
+- [x] `sched --version` 이 동작
 
 **완료 기준**
 
@@ -26,6 +26,22 @@
 5. Windows 콘솔에서 `sched --version` 이 한글 포함 문자열을 깨짐 없이 출력
 
 **주의** — `core/` 에 `<windows.h>` 가 들어가면 2번이 깨집니다. 그게 이 단계의 핵심 검증입니다.
+
+**완료** — 1~4번은 CI 에서 확인했습니다 (windows-latest 전체 빌드·테스트 14건, ubuntu 코어 전용 빌드).
+5번은 CI 가 `sched --version` 의 출력 바이트를 검사해 UTF-8 이 온전한 것까지 확인합니다.
+
+```
+0000000   s   c   h   e   d       0   .   1   .   0     342 200 224
+0000020 354 236 221 354 227 205     354 212 244 354 274 200 354 244 204
+0000040 353 237 254  \n
+```
+
+파이프로 받은 것이므로 **실제 콘솔 렌더링은 Windows PC 에서 한 번 눈으로 확인**해 주세요.
+폰트가 한글 글리프를 갖고 있지 않으면 프로그램이 옳아도 네모로 보입니다.
+
+Phase 0 에서 배운 것: `TEST_CASE` 이름에 한글을 쓰면 안 됩니다. ctest 가 이름을 필터 인자로
+넘기는데 Windows 가 `argv` 를 ANSI 코드 페이지로 변환하면서 `?` 로 날려버립니다. 같은 문제가
+Phase 4~5 에서 `--worker 김철수` 같은 한글 인자로 다시 옵니다.
 
 ---
 

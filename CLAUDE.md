@@ -113,6 +113,9 @@ ctest --preset debug-core-only --output-on-failure
 - 헤더는 `#pragma once`. 헤더에 `using namespace` 금지.
 - 주석은 "무엇"이 아니라 "왜".
 - 사용자에게 보이는 문자열은 한국어. 식별자와 주석은 영어여도 됩니다.
+- Catch2 `TEST_CASE` 이름은 ASCII 로 씁니다. ctest 가 이름을 필터 인자로 넘기는데 Windows 에서
+  한글이 `?` 로 깨져 테스트가 하나도 실행되지 않습니다. 설명은 바로 위 주석과 `SECTION` 에
+  한국어로 씁니다.
 
 ---
 
@@ -129,6 +132,6 @@ ctest --preset debug-core-only --output-on-failure
 
 ## 9. 진행 상황
 
-현재 Phase: **0 (프로젝트 골격)**
+현재 Phase: **1 (도메인 모델과 저장)**
 
 Phase 를 마치면 `docs/ROADMAP.md` 의 체크박스를 채우고 이 줄을 갱신하세요.
