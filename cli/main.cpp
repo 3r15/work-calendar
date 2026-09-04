@@ -1,16 +1,22 @@
+#include "cli/color.h"
 #include "cli/render.h"
 #include "core/app/absence_service.h"
 #include "core/app/assign_service.h"
 #include "core/app/data_dir.h"
+#include "core/app/prune_service.h"
 #include "core/app/day_view.h"
 #include "core/app/validate_service.h"
 #include "core/app/worker_lookup.h"
+#include "core/domain/day_plan.h"
 #include "core/domain/finding.h"
 #include "core/storage/json_io.h"
+#include "core/storage/lock.h"
 #include "core/util/clock.h"
+#include "core/util/korean.h"
 #include "platform/console.h"
 #include "platform/fileswap.h"
 #include "platform/paths.h"
+#include "platform/process.h"
 
 #include <CLI/CLI.hpp>
 
@@ -27,6 +33,8 @@ constexpr int kExitSuccess = 0;
 constexpr int kExitGeneral = 1;
 constexpr int kExitInvalidUsage = 2;
 constexpr int kExitDataFile = 3;
+// 성공했으나 미배정 슬롯이 존재 (--strict 를 준 경우에만).
+constexpr int kExitUnassigned = 4;
 
 // --worker 를 해석한다. 실패하면 무엇이 문제인지 출력하고 종료 코드를 돌려준다.
 // 이름이 여러 명과 일치하면 후보를 보여주고 멈춘다 — 조용히 한 명을 고르면 엉뚱한 사람이 쉰다.
@@ -38,7 +46,8 @@ int resolveWorkerOrExplain(const domain::Model& model, const std::string& query,
             out = match.worker.id;
             return kExitSuccess;
         case app::WorkerMatch::Kind::NotFound:
-            std::cerr << "작업자 \"" << query << "\"를 찾을 수 없습니다.\n";
+            std::cerr << "작업자 \"" << query << "\"" << util::josaEulReul(query)
+                      << " 찾을 수 없습니다.\n";
             std::cerr << "이름 대신 ID 로도 지정할 수 있습니다.\n";
             return kExitInvalidUsage;
         case app::WorkerMatch::Kind::Ambiguous:
@@ -62,7 +71,8 @@ bool parseWeekdayList(const std::string& text, std::vector<domain::Weekday>& out
         }
         const std::optional<domain::Weekday> day = domain::parseWeekday(token);
         if (!day.has_value()) {
-            std::cerr << "요일 \"" << token << "\"를 알 수 없습니다.\n";
+            std::cerr << "요일 \"" << token << "\"" << util::josaEulReul(token)
+                  << " 알 수 없습니다.\n";
             std::cerr << "SUN MON TUE WED THU FRI SAT 중에서 쉼표로 이어 적어 주세요.\n";
             return false;
         }
@@ -96,15 +106,38 @@ int main(int argc, char** argv) {
     app.require_subcommand(0, 1);
 
     std::string dataDirOption;
+    bool noColorFlag = false;
+    bool jsonFlag = false;
+    bool quietFlag = false;
     app.add_option("--data-dir", dataDirOption,
                    "데이터 폴더. 기본값은 실행 파일 옆 ./data 입니다.");
+    app.add_flag("--no-color", noColorFlag, "색상을 쓰지 않습니다.");
+    app.add_flag("--json", jsonFlag, "사람이 읽는 표 대신 JSON 으로 출력합니다.");
+    app.add_flag("--quiet", quietFlag, "경고와 안내를 숨기고 결과만 보여줍니다.");
 
     CLI::App* validate = app.add_subcommand("validate", "설정 파일의 정합성을 검사합니다.");
+
+    CLI::App* prune = app.add_subcommand("prune", "오래된 배정 기록을 한 달치씩 합쳐 보관합니다.");
+    int keepDays = app::kDefaultKeepDays;
+    bool dryRunFlag = false;
+    prune->add_option("--keep-days", keepDays, "이 일수보다 오래된 것만 옮깁니다 (기본 90).");
+    prune->add_flag("--dry-run", dryRunFlag, "옮기지 않고 몇 건인지만 셉니다.");
+    CLI::App* now_ = app.add_subcommand("now", "지금 시간대의 작업을 보여줍니다.");
     CLI::App* today = app.add_subcommand("today", "오늘의 배정을 보여줍니다.");
+    CLI::App* show = app.add_subcommand("show", "지정한 날짜와 시간대의 배정을 보여줍니다.");
+
+    std::string slotOption;
+    bool strictFlag = false;
+    show->add_option("--slot", slotOption, "시간대 ID 로 좁혀 봅니다.");
+    for (CLI::App* command : {now_, today, show}) {
+        command->add_flag("--strict", strictFlag,
+                          "미배정 슬롯이 있으면 종료 코드 4 로 끝냅니다.");
+    }
     CLI::App* assign = app.add_subcommand("assign", "그날의 배정을 계산해 저장합니다.");
 
     std::string dateOption;
     today->add_option("--date", dateOption, "조회할 날짜 (YYYY-MM-DD). 기본값은 오늘입니다.");
+    show->add_option("--date", dateOption, "조회할 날짜 (YYYY-MM-DD). 기본값은 오늘입니다.");
     assign->add_option("--date", dateOption, "배정할 날짜 (YYYY-MM-DD). 기본값은 오늘입니다.");
 
     bool forceFlag = false;
@@ -151,7 +184,10 @@ int main(int argc, char** argv) {
     // 전역 옵션은 서브명령 앞뒤 어디에 와도 받아야 한다. fallthrough 가 없으면
     // "sched validate --data-dir X" 가 인자 오류로 떨어진다.
     validate->fallthrough();
+    prune->fallthrough();
+    now_->fallthrough();
     today->fallthrough();
+    show->fallthrough();
     assign->fallthrough();
     off->fallthrough();
     offAdd->fallthrough();
@@ -160,7 +196,7 @@ int main(int argc, char** argv) {
     worker->fallthrough();
     workerOff->fallthrough();
 
-    app.footer("아직 구현 중입니다. 현재는 validate, today, assign, off, worker off 가 동작합니다.");
+    app.footer("매일 쓰는 것: sched now / sched today / sched off add --worker <이름> --today");
 
     // CLI11 은 파싱 결과를 예외로 알린다. 예외는 여기서 끝내고 안쪽으로 넘기지 않는다.
     try {
@@ -174,10 +210,53 @@ int main(int argc, char** argv) {
         return kExitInvalidUsage;
     }
 
+    // 색을 쓸 수 있는지 여기서 한 번 정한다. 끄는 조건이 셋이라 출력 코드마다 판단하면
+    // 어긋난다: --no-color, NO_COLOR 환경 변수, 콘솔이 ANSI 를 못 켜는 경우 (CLI-SPEC.md).
+    const bool colorEnabled = !noColorFlag && !cli::noColorRequested() && platform::enableAnsi();
+    const cli::Palette palette{colorEnabled && !jsonFlag};
+
     const std::optional<std::string> dataDirFromOption =
         dataDirOption.empty() ? std::nullopt : std::optional<std::string>{dataDirOption};
     const std::filesystem::path dataDir =
         app::resolveDataDir(dataDirFromOption, platform::executableDir());
+
+    // 데이터를 고치는 명령은 쓰기 락을 잡는다 (D-007). 조회만 하는 명령은 잡지 않는다 —
+    // 두 창에서 동시에 들여다보는 것은 막을 이유가 없다.
+    //
+    // today/now/show 도 그날 스냅샷이 없으면 계산해서 저장하므로 여기에 포함된다.
+    storage::ScopedLock writeLock;
+    const bool needsLock = off->parsed() || workerOff->parsed() || assign->parsed() ||
+                           prune->parsed() || now_->parsed() || today->parsed() || show->parsed();
+    if (needsLock) {
+        const util::Result<void> locked =
+            writeLock.acquire(dataDir, platform::processId(), util::SystemClock{}.now(),
+                              &platform::processAlive);
+        if (!locked) {
+            cli::renderError(std::cerr, locked.error(), palette);
+            return exitCodeFor(locked.error());
+        }
+    }
+
+    if (prune->parsed()) {
+        const util::Result<app::PruneResult> pruned = app::pruneSnapshots(
+            dataDir, util::SystemClock{}.now().date, keepDays, dryRunFlag);
+        if (!pruned) {
+            cli::renderError(std::cerr, pruned.error(), palette);
+            return exitCodeFor(pruned.error());
+        }
+        if (pruned.value().archived == 0) {
+            std::cout << "옮길 기록이 없습니다. " << keepDays << "일이 지난 배정 기록이 아직 "
+                      << "없습니다.\n";
+            return kExitSuccess;
+        }
+        std::cout << (dryRunFlag ? "옮길 수 있는 배정 기록: " : "배정 기록 ")
+                  << pruned.value().archived << "건" << (dryRunFlag ? "" : "을 보관했습니다")
+                  << "\n";
+        for (const std::string& file : pruned.value().touched) {
+            std::cout << "  state/archive/" << file << "\n";
+        }
+        return kExitSuccess;
+    }
 
     // 휴무와 정기 휴무는 데이터를 고치므로 먼저 모델을 읽는다.
     if (off->parsed() || workerOff->parsed()) {
@@ -185,7 +264,7 @@ int main(int argc, char** argv) {
 
         util::Result<storage::LoadedModel> loaded = storage::loadModel(dataDir);
         if (!loaded) {
-            cli::renderError(std::cerr, loaded.error());
+            cli::renderError(std::cerr, loaded.error(), palette);
             return exitCodeFor(loaded.error());
         }
         domain::Model model = std::move(loaded).value().model;
@@ -198,7 +277,8 @@ int main(int argc, char** argv) {
             }
             const std::optional<util::Date> parsed = util::Date::parse(dateOption);
             if (!parsed.has_value()) {
-                std::cerr << "날짜 \"" << dateOption << "\"를 읽을 수 없습니다.\n";
+                std::cerr << "날짜 \"" << dateOption << "\"" << util::josaEulReul(dateOption)
+                          << " 읽을 수 없습니다.\n";
                 std::cerr << "\"2026-09-04\" 처럼 YYYY-MM-DD 형식으로 적어 주세요.\n";
                 return kExitInvalidUsage;
             }
@@ -244,7 +324,7 @@ int main(int argc, char** argv) {
             if (const util::Result<void> saved =
                     app::setWeeklyOff(dataDir, model, workerId, weekdays);
                 !saved) {
-                cli::renderError(std::cerr, saved.error());
+                cli::renderError(std::cerr, saved.error(), palette);
                 return exitCodeFor(saved.error());
             }
             std::cout << "정기 휴무를 저장했습니다.\n";
@@ -274,7 +354,7 @@ int main(int argc, char** argv) {
             const util::Result<app::AbsenceChange> change =
                 app::addAbsence(dataDir, model, workerId, from, to, reasonOption, now);
             if (!change) {
-                cli::renderError(std::cerr, change.error());
+                cli::renderError(std::cerr, change.error(), palette);
                 return exitCodeFor(change.error());
             }
 
@@ -301,7 +381,7 @@ int main(int argc, char** argv) {
             }
             const util::Result<int> removed = app::removeAbsence(dataDir, model, workerId, date);
             if (!removed) {
-                cli::renderError(std::cerr, removed.error());
+                cli::renderError(std::cerr, removed.error(), palette);
                 return exitCodeFor(removed.error());
             }
             if (removed.value() == 0) {
@@ -316,22 +396,23 @@ int main(int argc, char** argv) {
     if (validate->parsed()) {
         const util::Result<domain::Report> result = app::validateDataDir(dataDir);
         if (!result) {
-            cli::renderError(std::cerr, result.error());
+            cli::renderError(std::cerr, result.error(), palette);
             return exitCodeFor(result.error());
         }
-        cli::renderReport(std::cout, result.value());
+        cli::renderReport(std::cout, result.value(), palette);
         // 경고만 있으면 실행은 가능하므로 성공으로 끝낸다.
         return result.value().hasErrors() ? kExitDataFile : kExitSuccess;
     }
 
-    if (today->parsed() || assign->parsed()) {
+    if (now_->parsed() || today->parsed() || show->parsed() || assign->parsed()) {
         const util::DateTime now = util::SystemClock{}.now();
 
         util::Date date = now.date;
         if (!dateOption.empty()) {
             const std::optional<util::Date> parsed = util::Date::parse(dateOption);
             if (!parsed.has_value()) {
-                std::cerr << "날짜 \"" << dateOption << "\"를 읽을 수 없습니다.\n";
+                std::cerr << "날짜 \"" << dateOption << "\"" << util::josaEulReul(dateOption)
+                          << " 읽을 수 없습니다.\n";
                 std::cerr << "\"2026-09-04\" 처럼 YYYY-MM-DD 형식으로 적어 주세요.\n";
                 return kExitInvalidUsage;
             }
@@ -340,7 +421,7 @@ int main(int argc, char** argv) {
 
         const util::Result<storage::LoadedModel> loaded = storage::loadModel(dataDir);
         if (!loaded) {
-            cli::renderError(std::cerr, loaded.error());
+            cli::renderError(std::cerr, loaded.error(), palette);
             return exitCodeFor(loaded.error());
         }
         const domain::Model& model = loaded.value().model;
@@ -361,18 +442,50 @@ int main(int argc, char** argv) {
         const util::Result<app::AssignOutcome> outcome =
             app::ensureSnapshot(dataDir, model, date, now, assign->parsed() && forceFlag);
         if (!outcome) {
-            cli::renderError(std::cerr, outcome.error());
+            cli::renderError(std::cerr, outcome.error(), palette);
             return exitCodeFor(outcome.error());
         }
 
+        const domain::DaySnapshot& snapshot = outcome.value().snapshot;
+
+        // --strict 는 미배정이 있으면 종료 코드 4 로 끝낸다. 스크립트가 결과를 알 수 있게 하려는 것.
+        const int strictCode =
+            (strictFlag && domain::countUnassigned(snapshot) > 0) ? kExitUnassigned : kExitSuccess;
+
+        if (jsonFlag) {
+            // 스냅샷 스키마를 그대로 내보내되 이름을 덧붙인다 (CLI-SPEC.md --json).
+            std::cout << cli::toJsonWithNames(model, snapshot);
+            return strictCode;
+        }
+
         if (assign->parsed()) {
-            cli::renderAssignOutcome(std::cout, outcome.value());
+            cli::renderAssignOutcome(std::cout, outcome.value(), palette, quietFlag);
             return kExitSuccess;
         }
 
-        cli::renderDayView(std::cout,
-                           app::buildDayView(model, date, now, &outcome.value().snapshot), now);
-        return kExitSuccess;
+        app::DayView view = app::buildDayView(model, date, now, &snapshot);
+
+        // now 는 지금 시간대만, show --slot 은 지정한 시간대만 남긴다.
+        if (now_->parsed() || !slotOption.empty()) {
+            std::vector<app::SlotBlock> kept;
+            for (const app::SlotBlock& slot : view.slots) {
+                const bool wanted = slotOption.empty() ? slot.isCurrent
+                                                       : slot.id == domain::TimeSlotId{slotOption};
+                if (wanted) {
+                    kept.push_back(slot);
+                }
+            }
+            if (!slotOption.empty() && kept.empty()) {
+                std::cerr << "시간대 \"" << slotOption << "\"" << util::josaEulReul(slotOption)
+                          << " 찾을 수 없습니다.\n";
+                std::cerr << "오늘 있는 시간대를 보려면: sched today\n";
+                return kExitInvalidUsage;
+            }
+            view.slots = std::move(kept);
+        }
+
+        cli::renderDayView(std::cout, view, now, palette);
+        return strictCode;
     }
 
     std::cout << app.help() << std::endl;

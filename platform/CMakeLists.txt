@@ -10,6 +10,7 @@ add_library(sched_platform STATIC
     win/console_win.cpp
     win/fileswap_win.cpp
     win/paths_win.cpp
+    win/process_win.cpp
 )
 add_library(sched::platform ALIAS sched_platform)
 
