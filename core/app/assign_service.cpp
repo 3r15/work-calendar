@@ -104,10 +104,10 @@ domain::DaySnapshot computeDay(const domain::Model& model, const util::Date& dat
 
 util::Result<AssignOutcome> ensureSnapshot(const std::filesystem::path& dataDir,
                                            const domain::Model& model, const util::Date& date,
-                                           const util::DateTime& now) {
+                                           const util::DateTime& now, bool force) {
     const std::filesystem::path path = storage::snapshotPath(dataDir, date.toString());
 
-    if (std::filesystem::exists(path)) {
+    if (!force && std::filesystem::exists(path)) {
         util::Result<storage::Loaded<domain::DaySnapshot>> loaded = storage::loadSnapshot(path);
         if (!loaded) {
             return loaded.error();

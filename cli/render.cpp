@@ -118,6 +118,39 @@ void renderAssignOutcome(std::ostream& out, const app::AssignOutcome& outcome) {
     out << "\n오늘 무엇을 하는지 보려면: sched today\n";
 }
 
+void renderAbsences(std::ostream& out, const domain::Model& model,
+                    const std::vector<domain::Absence>& absences) {
+    if (absences.empty()) {
+        out << "등록된 휴무가 없습니다.\n";
+        return;
+    }
+
+    // 이름 열을 표시 폭 기준으로 맞춘다.
+    std::size_t nameWidth = 0;
+    const auto nameOf = [&model](const domain::WorkerId& id) {
+        for (const domain::Worker& worker : model.workers.workers) {
+            if (worker.id == id) {
+                return worker.name;
+            }
+        }
+        return id.str();
+    };
+    for (const domain::Absence& absence : absences) {
+        nameWidth = std::max(nameWidth, util::displayWidth(nameOf(absence.workerId)));
+    }
+
+    for (const domain::Absence& absence : absences) {
+        out << padTo(nameOf(absence.workerId), nameWidth + 2) << absence.from;
+        if (absence.to != absence.from) {
+            out << " ~ " << absence.to;
+        }
+        if (!absence.reason.empty()) {
+            out << "  " << absence.reason;
+        }
+        out << "\n";
+    }
+}
+
 void renderReport(std::ostream& out, const domain::Report& report) {
     if (report.empty()) {
         out << "문제를 찾지 못했습니다.\n";

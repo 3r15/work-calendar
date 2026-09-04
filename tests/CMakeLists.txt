@@ -1,6 +1,7 @@
 find_package(Catch2 3 REQUIRED)
 
 add_executable(sched_tests
+    app/test_absence_service.cpp
     app/test_assign_service.cpp
     app/test_day_view.cpp
     domain/test_day_plan.cpp
