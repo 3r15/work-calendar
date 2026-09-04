@@ -6,16 +6,16 @@
 
 ## Phase 0 — 프로젝트 골격
 
-- [ ] CMakeLists.txt (core / platform / cli / tests 타겟)
-- [ ] CMakePresets.json 은 이미 제공됨. 프리셋 이름에 맞춰 구성
-- [ ] vcpkg.json 매니페스트 (nlohmann-json, cli11, catch2)
-- [ ] VSCode `.vscode/` 설정 (tasks, launch, c_cpp_properties)
-- [ ] MSVC `/utf-8` 플래그, GCC/Clang 경고 옵션
-- [ ] `platform/console.h` + Windows 구현 — `initConsole()`, `enableAnsi()`
-- [ ] `core/util/display_width.h` — East Asian Width 기반 폭 계산
-- [ ] `core/util/result.h` — 오류 반환 타입
-- [ ] `tests/util/test_display_width.cpp`
-- [ ] `sched --version` 이 동작
+- [x] CMakeLists.txt (core / platform / cli / tests 타겟)
+- [x] CMakePresets.json 은 이미 제공됨. 프리셋 이름에 맞춰 구성
+- [x] vcpkg.json 매니페스트 (nlohmann-json, cli11, catch2)
+- [x] VSCode `.vscode/` 설정 (tasks, launch, c_cpp_properties)
+- [x] MSVC `/utf-8` 플래그, GCC/Clang 경고 옵션
+- [x] `platform/console.h` + Windows 구현 — `initConsole()`, `enableAnsi()`
+- [x] `core/util/display_width.h` — East Asian Width 기반 폭 계산
+- [x] `core/util/result.h` — 오류 반환 타입
+- [x] `tests/util/test_display_width.cpp`
+- [x] `sched --version` 이 동작
 
 **완료 기준**
 
@@ -26,6 +26,10 @@
 5. Windows 콘솔에서 `sched --version` 이 한글 포함 문자열을 깨짐 없이 출력
 
 **주의** — `core/` 에 `<windows.h>` 가 들어가면 2번이 깨집니다. 그게 이 단계의 핵심 검증입니다.
+
+**현재 상태** — 2번과 3번(코어 전용 빌드·테스트 14건)은 리눅스에서 확인했습니다. 1번·3번(전체)·5번은
+Windows 가 필요하므로 CI 의 windows 잡 결과로 확인합니다. 전부 초록이 된 뒤 `CLAUDE.md` 9장의
+현재 Phase 를 1 로 올리세요.
 
 ---
 
