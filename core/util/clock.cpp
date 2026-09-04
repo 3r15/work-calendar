@@ -23,6 +23,11 @@ DateTime SystemClock::now() const {
     DateTime out;
     out.date = Date{std::chrono::year_month_day{std::chrono::sys_days{days.time_since_epoch()}}};
     out.time = TimeOfDay{static_cast<int>(sinceMidnight.count())};
+
+    // 로컬 시각에서 UTC 를 빼면 오프셋이다. 시간대 정보를 못 얻었으면 0(UTC)이 남는다.
+    const auto utc = std::chrono::floor<std::chrono::minutes>(instant.time_since_epoch());
+    const auto localMinutes = std::chrono::floor<std::chrono::minutes>(local.time_since_epoch());
+    out.utcOffsetMinutes = static_cast<int>((localMinutes - utc).count());
     return out;
 }
 

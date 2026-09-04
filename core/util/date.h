@@ -61,6 +61,11 @@ private:
 struct DateTime {
     Date date;
     TimeOfDay time;
+    // UTC 로부터의 분 오프셋. 한국이면 540. 스냅샷의 generatedAt 을 ISO 8601 로 적을 때 쓴다.
+    int utcOffsetMinutes{0};
 };
+
+// "2026-09-04T09:01:12+09:00" 형태. 초는 항상 00 이다 — 이 프로그램은 분까지만 다룬다.
+std::string formatIso8601(const DateTime& moment);
 
 }  // namespace util

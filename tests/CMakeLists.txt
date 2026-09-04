@@ -1,9 +1,16 @@
 find_package(Catch2 3 REQUIRED)
 
 add_executable(sched_tests
+    app/test_assign_service.cpp
     app/test_day_view.cpp
     domain/test_day_plan.cpp
     domain/test_validator.cpp
+    scheduling/test_conflict_groups.cpp
+    scheduling/test_cursor.cpp
+    scheduling/test_determinism.cpp
+    scheduling/test_headcount.cpp
+    scheduling/test_roundrobin.cpp
+    scheduling/test_weekday_filter.cpp
     storage/test_atomic_write.cpp
     storage/test_json_io.cpp
     util/test_date.cpp

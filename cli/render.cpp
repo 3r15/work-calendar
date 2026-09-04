@@ -58,8 +58,26 @@ void renderDayView(std::ostream& out, const app::DayView& view, const util::Date
                     nameWidth = std::max(nameWidth, util::displayWidth(task.name));
                 }
                 for (const app::TaskLine& task : set.tasks) {
-                    out << indent << "  " << padTo(task.name, nameWidth + 2) << task.requiredCount
-                        << "명\n";
+                    out << indent << "  " << padTo(task.name, nameWidth + 2);
+                    if (task.workers.empty() && task.unassignedCount == 0) {
+                        // 아직 배정하지 않은 날. 필요 인원만 보여준다.
+                        out << task.requiredCount << "명";
+                    } else {
+                        // 미배정을 먼저 적는다. 눈에 먼저 들어와야 하는 정보다.
+                        for (int i = 0; i < task.unassignedCount; ++i) {
+                            out << "─ 미배정 ─  ";
+                        }
+                        for (std::size_t i = 0; i < task.workers.size(); ++i) {
+                            if (i > 0) {
+                                out << "  ";
+                            }
+                            out << task.workers[i].name;
+                            if (task.workers[i].absent) {
+                                out << "(휴무)";
+                            }
+                        }
+                    }
+                    out << "\n";
                 }
             }
         }
@@ -81,6 +99,23 @@ void renderDayView(std::ostream& out, const app::DayView& view, const util::Date
         }
         out << "\n";
     }
+}
+
+void renderAssignOutcome(std::ostream& out, const app::AssignOutcome& outcome) {
+    const domain::DaySnapshot& snapshot = outcome.snapshot;
+    if (outcome.computed) {
+        out << snapshot.date << " 배정을 계산해 저장했습니다.\n";
+    } else {
+        // 같은 날 결과가 달라지면 안 되므로 다시 계산하지 않는다 (DESIGN 3.1).
+        out << snapshot.date << " 배정은 이미 있습니다 (" << snapshot.generatedAt << " 계산).\n";
+    }
+
+    const int unassigned = domain::countUnassigned(snapshot);
+    if (unassigned > 0) {
+        out << "\n⚠ 인원이 모자라 " << unassigned << "자리를 채우지 못했습니다.\n";
+        out << "  누가 더 나올 수 있으면 등록한 뒤 다시 배정하세요.\n";
+    }
+    out << "\n오늘 무엇을 하는지 보려면: sched today\n";
 }
 
 void renderReport(std::ostream& out, const domain::Report& report) {
