@@ -317,8 +317,14 @@ int main(int argc, char** argv) {
     //
     // today/now/show 도 그날 스냅샷이 없으면 계산해서 저장하므로 여기에 포함된다.
     storage::ScopedLock writeLock;
-    const bool writesData = off->parsed() || worker->parsed() || task->parsed() ||
-                            setCmd->parsed() || catCmd->parsed() || slotCmd->parsed();
+    // 부모 App 의 parsed() 를 보면 안 된다. CLI11 은 하위 명령이 실행되면 부모도 true 가 되므로
+    // "sched worker list" 같은 조회까지 쓰기 락을 잡게 된다 — 두 창에서 목록을 보는 것조차
+    // 막혀 버린다. 실제로 파일을 고치는 하위 명령만 나열한다.
+    const bool writesData = offAdd->parsed() || offRm->parsed() || workerOff->parsed() ||
+                            workerAdd->parsed() || workerRm->parsed() || workerEdit->parsed() ||
+                            taskAdd->parsed() || taskRm->parsed() || taskEdit->parsed() ||
+                            setAdd->parsed() || setRm->parsed() || catAdd->parsed() ||
+                            catRm->parsed() || slotAdd->parsed() || slotRm->parsed();
     const bool needsLock = writesData || assign->parsed() || prune->parsed() || now_->parsed() ||
                            today->parsed() || show->parsed();
     if (needsLock) {
@@ -605,7 +611,9 @@ int main(int argc, char** argv) {
             if (!nameOption.empty()) {
                 newName = nameOption;
             }
-            if (countOption > 0) {
+            // 값이 아니라 옵션이 주어졌는지로 판정한다. 값으로 보면 --count 0 이 조용히
+            // 무시되어 "수정했습니다" 만 나가고 아무것도 안 바뀐다.
+            if (taskEdit->count("--count") > 0) {
                 newCount = countOption;
             }
             if (taskEdit->count("--conflicts") > 0) {

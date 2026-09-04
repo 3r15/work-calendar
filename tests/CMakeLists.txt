@@ -20,6 +20,8 @@ add_executable(sched_tests
     util/test_date.cpp
     util/test_display_width.cpp
     util/test_korean.cpp
+    util/test_semver.cpp
+    util/test_sha256.cpp
     util/test_result.cpp
 )
 

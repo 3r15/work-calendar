@@ -488,14 +488,14 @@ util::Result<void> addTimeSlot(const std::filesystem::path& dataDir, domain::Mod
     model.config.timeSlots.push_back(slot);
 
     // 같은 요일에 구간이 겹치면 "지금 어느 시간대인가" 에 답이 두 개가 된다. 저장 전에 막는다.
-    const domain::Report report = domain::validate(model);
-    for (const domain::Finding& finding : report.findings()) {
-        if (finding.severity == domain::Severity::Error &&
-            finding.message.find("겹칩니다") != std::string::npos) {
-            model.config = before;
-            return util::makeError(util::ErrorCode::Conflict, finding.message,
-                                   "겹치지 않게 시각을 조정하거나 요일을 나눠 주세요.");
-        }
+    // validator 와 같은 판정 함수를 쓴다 — 메시지 문구로 판정하면 문구가 바뀔 때 조용히 통과한다.
+    const std::vector<domain::TimeSlotOverlap> overlaps =
+        domain::findTimeSlotOverlaps(model.config);
+    if (!overlaps.empty()) {
+        const std::string message = domain::describeOverlap(overlaps.front());
+        model.config = before;
+        return util::makeError(util::ErrorCode::Conflict, message,
+                               "겹치지 않게 시각을 조정하거나 요일을 나눠 주세요.");
     }
 
     if (const util::Result<void> written =

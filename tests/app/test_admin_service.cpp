@@ -324,3 +324,62 @@ TEST_CASE("a working configuration can be built through the service alone", "[ad
     }
     REQUIRE_FALSE(report.hasErrors());
 }
+
+// 겹침 판정을 validator 와 admin_service 가 같은 함수로 한다.
+// 예전에는 admin_service 가 오류 메시지에 "겹칩니다" 가 들어 있는지로 판정했다. 문구가 바뀌면
+// 겹침 검사가 조용히 통과해 버린다.
+TEST_CASE("overlap detection is shared, not message matching", "[admin]") {
+    Sandbox sandbox{"overlap_shared"};
+    const domain::Model model = sandbox.load();
+
+    // 샘플은 겹치지 않는다.
+    REQUIRE(domain::findTimeSlotOverlaps(model.config).empty());
+
+    domain::Config broken = model.config;
+    domain::TimeSlot extra;
+    extra.id = domain::TimeSlotId{"overlapping"};
+    extra.displayName = "겹치는 시간대";
+    extra.start = "10:00";
+    extra.end = "11:00";
+    extra.weekdays = {domain::Weekday::Tue};
+    extra.categoryIds = {domain::CategoryId{"weekday_am"}};
+    broken.timeSlots.push_back(extra);
+
+    const std::vector<domain::TimeSlotOverlap> overlaps = domain::findTimeSlotOverlaps(broken);
+    REQUIRE(overlaps.size() == 1);
+    REQUIRE(overlaps.front().a != nullptr);
+    REQUIRE(overlaps.front().b != nullptr);
+    REQUIRE(domain::contains(overlaps.front().weekdays, domain::Weekday::Tue));
+    // 설명 문장은 판정과 분리되어 있다.
+    REQUIRE(domain::describeOverlap(overlaps.front()).find("겹칩니다") != std::string::npos);
+
+    SECTION("반열림 구간이라 맞닿은 시간대는 겹치지 않는다 (D-012)") {
+        domain::Config touching = model.config;
+        domain::TimeSlot next;
+        next.id = domain::TimeSlotId{"touching"};
+        next.displayName = "이어지는 시간대";
+        next.start = "12:00";  // 평일 오전이 12:00 에 끝난다
+        next.end = "13:00";
+        next.weekdays = {domain::Weekday::Tue};
+        next.categoryIds = {domain::CategoryId{"weekday_am"}};
+        touching.timeSlots.push_back(next);
+        REQUIRE(domain::findTimeSlotOverlaps(touching).empty());
+    }
+}
+
+// 필요 인원을 0 으로 고치려는 시도는 오류여야 한다.
+TEST_CASE("editing required count to zero is rejected", "[admin]") {
+    Sandbox sandbox{"zero_count"};
+    domain::Model model = sandbox.load();
+    const int before = findTask(model, "vacuum")->requiredCount;
+
+    const util::Result<void> refused =
+        app::editTask(sandbox.dir(), model, domain::TaskId{"vacuum"}, std::nullopt,
+                      std::optional<int>{0}, std::nullopt, std::nullopt, std::nullopt);
+    REQUIRE_FALSE(refused.ok());
+    REQUIRE(refused.error().code == util::ErrorCode::InvalidUsage);
+
+    // 파일도 그대로다.
+    REQUIRE(sandbox.load().tasks.tasks.size() == model.tasks.tasks.size());
+    REQUIRE(findTask(sandbox.load(), "vacuum")->requiredCount == before);
+}

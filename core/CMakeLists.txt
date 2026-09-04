@@ -21,12 +21,15 @@ add_library(sched_core STATIC
     app/data_dir.cpp
     app/prune_service.cpp
     app/day_view.cpp
+    app/update_service.cpp
     app/validate_service.cpp
     app/worker_lookup.cpp
     util/clock.cpp
     util/date.cpp
     util/display_width.cpp
     util/korean.cpp
+    util/semver.cpp
+    util/sha256.cpp
 )
 add_library(sched::core ALIAS sched_core)
 

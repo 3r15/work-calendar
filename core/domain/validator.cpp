@@ -213,29 +213,8 @@ void checkTimeSlots(const Model& model, Report& report) {
     }
 
     // 같은 요일에 구간이 겹치면 "지금 어느 시간대인가" 가 하나로 정해지지 않는다.
-    for (std::size_t i = 0; i < model.config.timeSlots.size(); ++i) {
-        for (std::size_t j = i + 1; j < model.config.timeSlots.size(); ++j) {
-            const TimeSlot& a = model.config.timeSlots[i];
-            const TimeSlot& b = model.config.timeSlots[j];
-            if (!isTimeString(a.start) || !isTimeString(a.end) || !isTimeString(b.start) ||
-                !isTimeString(b.end)) {
-                continue;
-            }
-            const std::vector<Weekday> shared =
-                intersect(effectiveWeekdays(a.weekdays, model.config.workCalendar.workWeekdays),
-                          effectiveWeekdays(b.weekdays, model.config.workCalendar.workWeekdays));
-            if (shared.empty()) {
-                continue;
-            }
-            if (a.start < b.end && b.start < a.end) {
-                report.error(kConfigFile,
-                             "시간대 \"" + a.displayName + "\"" +
-                                 std::string{util::josaWaGwa(a.displayName)} + " \"" +
-                                 b.displayName + "\"" +
-                                 std::string{util::josaIGa(b.displayName)} + " " +
-                                 joinWeekdays(shared) + "요일에 겹칩니다.");
-            }
-        }
+    for (const TimeSlotOverlap& overlap : findTimeSlotOverlaps(model.config)) {
+        report.error(kConfigFile, describeOverlap(overlap));
     }
 }
 
@@ -379,6 +358,43 @@ void checkWarnings(const Model& model, Report& report) {
 }
 
 }  // namespace
+
+std::vector<TimeSlotOverlap> findTimeSlotOverlaps(const Config& config) {
+    std::vector<TimeSlotOverlap> out;
+    for (std::size_t i = 0; i < config.timeSlots.size(); ++i) {
+        for (std::size_t j = i + 1; j < config.timeSlots.size(); ++j) {
+            const TimeSlot& a = config.timeSlots[i];
+            const TimeSlot& b = config.timeSlots[j];
+            // 형식이 깨진 시각은 여기서 다루지 않는다. 그건 따로 오류로 잡힌다.
+            if (!isTimeString(a.start) || !isTimeString(a.end) || !isTimeString(b.start) ||
+                !isTimeString(b.end)) {
+                continue;
+            }
+            const std::vector<Weekday> shared =
+                intersect(effectiveWeekdays(a.weekdays, config.workCalendar.workWeekdays),
+                          effectiveWeekdays(b.weekdays, config.workCalendar.workWeekdays));
+            if (shared.empty()) {
+                continue;
+            }
+            // 반열림 구간이므로 09:00–12:00 과 12:00–15:00 은 겹치지 않는다 (D-012).
+            if (a.start < b.end && b.start < a.end) {
+                out.push_back(TimeSlotOverlap{&a, &b, shared});
+            }
+        }
+    }
+    return out;
+}
+
+std::string describeOverlap(const TimeSlotOverlap& overlap) {
+    if (overlap.a == nullptr || overlap.b == nullptr) {
+        return {};
+    }
+    return "시간대 \"" + overlap.a->displayName + "\"" +
+           std::string{util::josaWaGwa(overlap.a->displayName)} + " \"" +
+           overlap.b->displayName + "\"" +
+           std::string{util::josaIGa(overlap.b->displayName)} + " " +
+           joinWeekdays(overlap.weekdays) + "요일에 겹칩니다.";
+}
 
 bool isDateString(const std::string& text) {
     if (text.size() != 10 || text[4] != '-' || text[7] != '-') {
