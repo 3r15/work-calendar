@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '릴리스 태그 (예: v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows-release:
+    name: Windows 릴리스 빌드
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 태그 결정
+        id: tag
+        shell: bash
+        run: echo "name=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake --preset release -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build
+        run: cmake --build --preset release
+
+      # data/ 는 샘플 데이터로 채운다. 압축을 풀면 바로 sched today 가 되어야 한다 (README-PLAN 2장).
+      - name: 패키징
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="stage/sched"
+          mkdir -p "$stage/data"
+          find build/release -name 'sched.exe' -exec cp {} "$stage/" \;
+          find build/release -name 'updater.exe' -exec cp {} "$stage/" \; || true
+          cp data-sample/*.json "$stage/data/"
+          cp README.md "$stage/"
+          cd stage
+          7z a -tzip "../sched-win-x64.zip" sched
+
+      - name: SHA256
+        shell: bash
+        run: |
+          sha256sum sched-win-x64.zip | tee SHA256SUMS.txt
+
+      - name: 릴리스 발행
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.tag.outputs.name }}" \
+            --title "${{ steps.tag.outputs.name }}" \
+            --generate-notes \
+            sched-win-x64.zip SHA256SUMS.txt

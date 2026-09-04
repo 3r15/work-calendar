@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "taskSets": [
+    { "id": "cleaning_am",      "displayName": "청소" },
+    { "id": "cleaning_pm",      "displayName": "청소" },
+    { "id": "cleaning_weekend", "displayName": "청소" },
+    { "id": "zone",             "displayName": "배치구역" }
+  ],
+  "tasks": [
+    {
+      "id": "vacuum",
+      "name": "청소기",
+      "taskSetIds": ["cleaning_am", "cleaning_pm", "cleaning_weekend"],
+      "requiredCount": 2,
+      "conflictsWith": ["mop"],
+      "weekdays": [],
+      "priority": null
+    },
+    {
+      "id": "mop",
+      "name": "밀대",
+      "taskSetIds": ["cleaning_am", "cleaning_pm", "cleaning_weekend"],
+      "requiredCount": 2,
+      "conflictsWith": ["vacuum"],
+      "weekdays": [],
+      "priority": null
+    },
+    {
+      "id": "sanitize",
+      "name": "소독",
+      "taskSetIds": ["cleaning_am"],
+      "requiredCount": 2,
+      "conflictsWith": [],
+      "weekdays": [],
+      "priority": null
+    },
+    {
+      "id": "tidy",
+      "name": "정리",
+      "taskSetIds": ["cleaning_am", "cleaning_pm"],
+      "requiredCount": 2,
+      "conflictsWith": [],
+      "weekdays": [],
+      "priority": null
+    },
+    {
+      "id": "trash",
+      "name": "쓰레기 배출",
+      "taskSetIds": ["cleaning_pm"],
+      "requiredCount": 1,
+      "conflictsWith": [],
+      "weekdays": [],
+      "priority": null
+    },
+    {
+      "id": "deep_clean",
+      "name": "대청소",
+      "taskSetIds": ["cleaning_weekend"],
+      "requiredCount": 2,
+      "conflictsWith": [],
+      "weekdays": ["SAT"],
+      "priority": null
+    },
+    {
+      "id": "zone_a",
+      "name": "A구역",
+      "taskSetIds": ["zone"],
+      "requiredCount": 1,
+      "conflictsWith": [],
+      "weekdays": [],
+      "priority": null
+    },
+    {
+      "id": "zone_b",
+      "name": "B구역",
+      "taskSetIds": ["zone"],
+      "requiredCount": 1,
+      "conflictsWith": [],
+      "weekdays": [],
+      "priority": null
+    }
+  ]
+}

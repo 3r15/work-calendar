@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "workers": [
+    { "id": "w_kim",  "name": "김철수", "active": true, "weeklyOff": ["SUN", "MON"], "note": "" },
+    { "id": "w_lee",  "name": "이영희", "active": true, "weeklyOff": ["SUN", "MON"], "note": "" },
+    { "id": "w_park", "name": "박민수", "active": true, "weeklyOff": ["SUN", "MON"], "note": "" },
+    { "id": "w_choi", "name": "최지우", "active": true, "weeklyOff": ["SUN", "MON"], "note": "" }
+  ]
+}

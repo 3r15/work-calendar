@@ -1,0 +1,33 @@
+# 빌드 산출물
+build/
+out/
+install/
+CMakeUserPresets.json
+compile_commands.json
+
+# vcpkg
+vcpkg_installed/
+.vcpkg-root
+
+# 실행 중 생성되는 데이터 (샘플은 data-sample/ 에 있음)
+data/
+*.bak
+*.tmp
+
+# IDE
+.vs/
+.idea/
+.cache/
+*.user
+*.suo
+*.sln
+*.vcxproj*
+
+# VSCode: 프로젝트 공용 설정은 커밋하고 개인 설정만 제외
+.vscode/settings.json
+.vscode/*.log
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

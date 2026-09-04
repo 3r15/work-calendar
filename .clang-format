@@ -1,0 +1,32 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+
+AccessModifierOffset: -4
+AllowShortFunctionsOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBraces: Attach
+FixNamespaceComments: true
+NamespaceIndentation: None
+PointerAlignment: Left
+SeparateDefinitionBlocks: Always
+SpaceAfterTemplateKeyword: false
+
+# core -> platform 순서로 묶어 의존 방향이 눈에 보이게 한다
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+IncludeCategories:
+  - Regex: '^<.*\.h>'
+    Priority: 4
+  - Regex: '^<.*>'
+    Priority: 3
+  - Regex: '^"(core|platform|cli|updater)/'
+    Priority: 1
+  - Regex: '.*'
+    Priority: 2

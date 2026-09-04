@@ -1,0 +1,59 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "SCHED_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug (전체)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SCHED_CORE_ONLY": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release (전체)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SCHED_CORE_ONLY": "OFF"
+      }
+    },
+    {
+      "name": "debug-core-only",
+      "displayName": "Debug (코어만 · 리눅스/클라우드)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SCHED_CORE_ONLY": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "debug-core-only", "configurePreset": "debug-core-only" }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "debug-core-only",
+      "configurePreset": "debug-core-only",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

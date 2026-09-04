@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "workCalendar": {
+    "workWeekdays": ["TUE", "WED", "THU", "FRI", "SAT"],
+    "holidays": []
+  },
+  "timeSlots": [
+    {
+      "id": "am_weekday",
+      "displayName": "평일 오전",
+      "start": "09:00",
+      "end": "12:00",
+      "weekdays": ["TUE", "WED", "THU", "FRI"],
+      "categoryIds": ["weekday_am"]
+    },
+    {
+      "id": "pm_weekday",
+      "displayName": "평일 오후",
+      "start": "13:00",
+      "end": "18:00",
+      "weekdays": ["TUE", "WED", "THU", "FRI"],
+      "categoryIds": ["weekday_pm"]
+    },
+    {
+      "id": "am_weekend",
+      "displayName": "주말 오전",
+      "start": "09:00",
+      "end": "12:00",
+      "weekdays": ["SAT"],
+      "categoryIds": ["weekend_am"]
+    },
+    {
+      "id": "pm_weekend",
+      "displayName": "주말 오후",
+      "start": "13:00",
+      "end": "17:00",
+      "weekdays": ["SAT"],
+      "categoryIds": ["weekend_pm"]
+    }
+  ],
+  "categories": [
+    { "id": "weekday_am", "displayName": "평일 오전", "taskSetIds": ["cleaning_am", "zone"] },
+    { "id": "weekday_pm", "displayName": "평일 오후", "taskSetIds": ["cleaning_pm", "zone"] },
+    { "id": "weekend_am", "displayName": "주말 오전", "taskSetIds": ["cleaning_weekend", "zone"] },
+    { "id": "weekend_pm", "displayName": "주말 오후", "taskSetIds": ["cleaning_weekend", "zone"] }
+  ],
+  "assignment": {
+    "crossSetConflicts": false
+  },
+  "update": {
+    "enabled": true,
+    "repo": "owner/scheduler",
+    "checkIntervalHours": 24
+  }
+}
