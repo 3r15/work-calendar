@@ -22,6 +22,15 @@ void renderAssignOutcome(std::ostream& out, const app::AssignOutcome& outcome,
 void renderAbsences(std::ostream& out, const domain::Model& model,
                     const std::vector<domain::Absence>& absences);
 void renderReport(std::ostream& out, const domain::Report& report, const Palette& palette);
+
+// 목록 출력. 열 정렬은 전부 displayWidth() 기준이다 — 한글이 섞여도 어긋나지 않는다.
+void renderWorkers(std::ostream& out, const domain::Model& model, bool includeInactive,
+                   const Palette& palette);
+void renderTasks(std::ostream& out, const domain::Model& model, const std::string& setFilter,
+                 const Palette& palette);
+void renderTaskSets(std::ostream& out, const domain::Model& model, const Palette& palette);
+void renderCategories(std::ostream& out, const domain::Model& model, const Palette& palette);
+void renderTimeSlots(std::ostream& out, const domain::Model& model, const Palette& palette);
 void renderError(std::ostream& out, const util::Error& error, const Palette& palette);
 
 // --json 모드. 스냅샷 스키마에 workerName 과 taskName 을 덧붙여 소비 측이 이름을 다시

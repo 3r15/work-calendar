@@ -171,6 +171,167 @@ void renderAbsences(std::ostream& out, const domain::Model& model,
     }
 }
 
+namespace {
+
+std::string joinWeekdayCodes(const std::vector<domain::Weekday>& days) {
+    if (days.empty()) {
+        return "근무일 전체";
+    }
+    std::string out;
+    for (std::size_t i = 0; i < days.size(); ++i) {
+        if (i > 0) {
+            out += ",";
+        }
+        out += domain::formatWeekday(days[i]);
+    }
+    return out;
+}
+
+// 열 하나의 폭을 값들의 표시 폭에서 정한다.
+template <typename Range, typename Get>
+std::size_t widthOf(const Range& items, Get get) {
+    std::size_t width = 0;
+    for (const auto& item : items) {
+        width = std::max(width, util::displayWidth(get(item)));
+    }
+    return width;
+}
+
+}  // namespace
+
+void renderWorkers(std::ostream& out, const domain::Model& model, bool includeInactive,
+                   const Palette& palette) {
+    std::vector<const domain::Worker*> shown;
+    for (const domain::Worker& worker : model.workers.workers) {
+        if (worker.active || includeInactive) {
+            shown.push_back(&worker);
+        }
+    }
+    if (shown.empty()) {
+        out << "등록된 작업자가 없습니다.\n";
+        out << "추가하려면: sched worker add --name \"김철수\"\n";
+        return;
+    }
+
+    const std::size_t idWidth =
+        widthOf(shown, [](const domain::Worker* w) { return w->id.str(); });
+    const std::size_t nameWidth = widthOf(shown, [](const domain::Worker* w) { return w->name; });
+
+    for (const domain::Worker* worker : shown) {
+        const bool inactive = !worker->active;
+        if (inactive) {
+            out << palette.gray();
+        }
+        out << padTo(worker->id.str(), idWidth + 2) << padTo(worker->name, nameWidth + 2);
+        out << "정기휴무 " << joinWeekdayCodes(worker->weeklyOff);
+        if (inactive) {
+            out << "  (제외됨)" << palette.reset();
+        }
+        out << "\n";
+    }
+    // 배열 순서가 라운드 로빈 기준이라는 사실은 사람이 알아야 한다.
+    out << "\n" << palette.dim() << "위 순서가 배정이 도는 순서입니다." << palette.reset()
+        << "\n";
+}
+
+void renderTasks(std::ostream& out, const domain::Model& model, const std::string& setFilter,
+                 const Palette& palette) {
+    std::vector<const domain::Task*> shown;
+    for (const domain::Task& task : model.tasks.tasks) {
+        if (!setFilter.empty()) {
+            const domain::TaskSetId wanted{setFilter};
+            if (std::find(task.taskSetIds.begin(), task.taskSetIds.end(), wanted) ==
+                task.taskSetIds.end()) {
+                continue;
+            }
+        }
+        shown.push_back(&task);
+    }
+    if (shown.empty()) {
+        out << "해당하는 작업이 없습니다.\n";
+        return;
+    }
+
+    const std::size_t idWidth = widthOf(shown, [](const domain::Task* t) { return t->id.str(); });
+    const std::size_t nameWidth = widthOf(shown, [](const domain::Task* t) { return t->name; });
+
+    for (const domain::Task* task : shown) {
+        out << padTo(task->id.str(), idWidth + 2) << padTo(task->name, nameWidth + 2)
+            << task->requiredCount << "명";
+        if (!task->conflictsWith.empty()) {
+            out << "  " << palette.yellow() << "배타 ";
+            for (std::size_t i = 0; i < task->conflictsWith.size(); ++i) {
+                out << (i > 0 ? "," : "") << task->conflictsWith[i].str();
+            }
+            out << palette.reset();
+        }
+        if (!task->weekdays.empty()) {
+            out << "  " << joinWeekdayCodes(task->weekdays);
+        }
+        out << "\n";
+    }
+}
+
+void renderTaskSets(std::ostream& out, const domain::Model& model, const Palette& palette) {
+    if (model.tasks.taskSets.empty()) {
+        out << "등록된 작업집합이 없습니다.\n";
+        return;
+    }
+    const std::size_t idWidth =
+        widthOf(model.tasks.taskSets, [](const domain::TaskSet& s) { return s.id.str(); });
+
+    for (const domain::TaskSet& set : model.tasks.taskSets) {
+        int taskCount = 0;
+        for (const domain::Task& task : model.tasks.tasks) {
+            if (std::find(task.taskSetIds.begin(), task.taskSetIds.end(), set.id) !=
+                task.taskSetIds.end()) {
+                taskCount += 1;
+            }
+        }
+        out << padTo(set.id.str(), idWidth + 2) << set.displayName << "  " << palette.dim()
+            << "작업 " << taskCount << "개" << palette.reset() << "\n";
+    }
+}
+
+void renderCategories(std::ostream& out, const domain::Model& model, const Palette& palette) {
+    if (model.config.categories.empty()) {
+        out << "등록된 분류가 없습니다.\n";
+        return;
+    }
+    const std::size_t idWidth =
+        widthOf(model.config.categories, [](const domain::Category& c) { return c.id.str(); });
+
+    for (const domain::Category& category : model.config.categories) {
+        out << padTo(category.id.str(), idWidth + 2) << category.displayName << "  "
+            << palette.dim();
+        for (std::size_t i = 0; i < category.taskSetIds.size(); ++i) {
+            out << (i > 0 ? ", " : "") << category.taskSetIds[i].str();
+        }
+        out << palette.reset() << "\n";
+    }
+}
+
+void renderTimeSlots(std::ostream& out, const domain::Model& model, const Palette& palette) {
+    if (model.config.timeSlots.empty()) {
+        out << "등록된 시간대가 없습니다.\n";
+        return;
+    }
+    const std::size_t idWidth =
+        widthOf(model.config.timeSlots, [](const domain::TimeSlot& s) { return s.id.str(); });
+    const std::size_t nameWidth =
+        widthOf(model.config.timeSlots, [](const domain::TimeSlot& s) { return s.displayName; });
+
+    for (const domain::TimeSlot& slot : model.config.timeSlots) {
+        out << padTo(slot.id.str(), idWidth + 2) << padTo(slot.displayName, nameWidth + 2)
+            << slot.start << "–" << slot.end << "  " << joinWeekdayCodes(slot.weekdays) << "  "
+            << palette.dim();
+        for (std::size_t i = 0; i < slot.categoryIds.size(); ++i) {
+            out << (i > 0 ? ", " : "") << slot.categoryIds[i].str();
+        }
+        out << palette.reset() << "\n";
+    }
+}
+
 void renderReport(std::ostream& out, const domain::Report& report, const Palette& palette) {
     if (report.empty()) {
         out << "문제를 찾지 못했습니다.\n";

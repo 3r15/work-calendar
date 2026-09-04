@@ -1,6 +1,7 @@
 #include "cli/color.h"
 #include "cli/render.h"
 #include "core/app/absence_service.h"
+#include "core/app/admin_service.h"
 #include "core/app/assign_service.h"
 #include "core/app/data_dir.h"
 #include "core/app/prune_service.h"
@@ -181,6 +182,93 @@ int main(int argc, char** argv) {
     workerOff->add_option("--weekly", weeklyOption, "요일 목록 (예: SUN,MON). 비우면 해제")
         ->required();
 
+    // 관리 명령. 설정 파일을 손으로 고치지 않고도 운영되게 한다.
+    std::string nameOption;
+    std::string idOption;
+    std::string setsOption;
+    std::string catsOption;
+    std::string conflictsOption;
+    std::string weekdaysOption;
+    std::string activeOption;
+    std::string startOption;
+    std::string endOption;
+    int countOption = 0;
+    bool allFlag = false;
+    bool hardFlag = false;
+
+    CLI::App* workerAdd = worker->add_subcommand("add", "작업자를 추가합니다.");
+    workerAdd->add_option("--name", nameOption, "이름")->required();
+    workerAdd->add_option("--id", idOption, "ID. 비우면 자동으로 붙입니다.");
+    workerAdd->add_option("--weekly-off", weeklyOption, "정기 휴무 요일 (예: SUN,MON)");
+
+    CLI::App* workerList = worker->add_subcommand("list", "작업자 목록을 보여줍니다.");
+    workerList->add_flag("--all", allFlag, "쉬는 사람(active:false)도 함께 보여줍니다.");
+
+    CLI::App* workerRm = worker->add_subcommand("rm", "작업자를 제외합니다.");
+    workerRm->add_option("--worker", workerOption, "작업자 이름 또는 ID")->required();
+    workerRm->add_flag("--hard", hardFlag, "정말 삭제합니다. 과거 기록의 참조가 끊어집니다.");
+
+    CLI::App* workerEdit = worker->add_subcommand("edit", "작업자를 수정합니다.");
+    workerEdit->add_option("--worker", workerOption, "작업자 이름 또는 ID")->required();
+    workerEdit->add_option("--name", nameOption, "새 이름");
+    workerEdit->add_option("--active", activeOption, "true 또는 false");
+
+    CLI::App* task = app.add_subcommand("task", "작업을 관리합니다.");
+    task->require_subcommand(1);
+    CLI::App* taskAdd = task->add_subcommand("add", "작업을 추가합니다.");
+    taskAdd->add_option("--id", idOption, "작업 ID")->required();
+    taskAdd->add_option("--name", nameOption, "화면에 보일 이름");
+    taskAdd->add_option("--set", setsOption, "속할 작업집합 (쉼표로 여럿)")->required();
+    taskAdd->add_option("--count", countOption, "필요 인원")->required();
+    taskAdd->add_option("--conflicts", conflictsOption, "함께 맡을 수 없는 작업 (쉼표로 여럿)");
+    taskAdd->add_option("--weekdays", weekdaysOption, "이 요일에만 (비우면 근무일 전체)");
+
+    CLI::App* taskList = task->add_subcommand("list", "작업 목록을 보여줍니다.");
+    taskList->add_option("--set", setsOption, "이 작업집합의 것만");
+
+    CLI::App* taskRm = task->add_subcommand("rm", "작업을 지웁니다.");
+    taskRm->add_option("--id", idOption, "작업 ID")->required();
+
+    CLI::App* taskEdit = task->add_subcommand("edit", "작업을 수정합니다.");
+    taskEdit->add_option("--id", idOption, "작업 ID")->required();
+    taskEdit->add_option("--name", nameOption, "새 이름");
+    taskEdit->add_option("--count", countOption, "필요 인원");
+    taskEdit->add_option("--set", setsOption, "속할 작업집합 (통째로 교체)");
+    taskEdit->add_option("--conflicts", conflictsOption, "배타 작업 (통째로 교체)");
+    taskEdit->add_option("--weekdays", weekdaysOption, "요일 (통째로 교체)");
+
+    CLI::App* setCmd = app.add_subcommand("set", "작업집합을 관리합니다.");
+    setCmd->require_subcommand(1);
+    CLI::App* setAdd = setCmd->add_subcommand("add", "작업집합을 추가합니다.");
+    setAdd->add_option("--id", idOption, "작업집합 ID")->required();
+    setAdd->add_option("--name", nameOption, "화면에 보일 이름");
+    CLI::App* setList = setCmd->add_subcommand("list", "작업집합 목록을 보여줍니다.");
+    CLI::App* setRm = setCmd->add_subcommand("rm", "작업집합을 지웁니다.");
+    setRm->add_option("--id", idOption, "작업집합 ID")->required();
+
+    CLI::App* catCmd = app.add_subcommand("cat", "작업분류를 관리합니다.");
+    catCmd->require_subcommand(1);
+    CLI::App* catAdd = catCmd->add_subcommand("add", "분류를 추가합니다.");
+    catAdd->add_option("--id", idOption, "분류 ID")->required();
+    catAdd->add_option("--name", nameOption, "화면에 보일 이름");
+    catAdd->add_option("--set", setsOption, "묶을 작업집합 (쉼표로 여럿)")->required();
+    CLI::App* catList = catCmd->add_subcommand("list", "분류 목록을 보여줍니다.");
+    CLI::App* catRm = catCmd->add_subcommand("rm", "분류를 지웁니다.");
+    catRm->add_option("--id", idOption, "분류 ID")->required();
+
+    CLI::App* slotCmd = app.add_subcommand("slot", "시간대를 관리합니다.");
+    slotCmd->require_subcommand(1);
+    CLI::App* slotAdd = slotCmd->add_subcommand("add", "시간대를 추가합니다.");
+    slotAdd->add_option("--id", idOption, "시간대 ID")->required();
+    slotAdd->add_option("--name", nameOption, "화면에 보일 이름");
+    slotAdd->add_option("--start", startOption, "시작 시각 HH:MM")->required();
+    slotAdd->add_option("--end", endOption, "종료 시각 HH:MM")->required();
+    slotAdd->add_option("--weekdays", weekdaysOption, "이 요일에만 (비우면 근무일 전체)");
+    slotAdd->add_option("--cat", catsOption, "붙일 분류 (쉼표로 여럿)")->required();
+    CLI::App* slotList = slotCmd->add_subcommand("list", "시간대 목록을 보여줍니다.");
+    CLI::App* slotRm = slotCmd->add_subcommand("rm", "시간대를 지웁니다.");
+    slotRm->add_option("--id", idOption, "시간대 ID")->required();
+
     // 전역 옵션은 서브명령 앞뒤 어디에 와도 받아야 한다. fallthrough 가 없으면
     // "sched validate --data-dir X" 가 인자 오류로 떨어진다.
     validate->fallthrough();
@@ -194,7 +282,11 @@ int main(int argc, char** argv) {
     offRm->fallthrough();
     offList->fallthrough();
     worker->fallthrough();
-    workerOff->fallthrough();
+    for (CLI::App* command : {workerOff, workerAdd, workerList, workerRm, workerEdit, task, taskAdd,
+                              taskList, taskRm, taskEdit, setCmd, setAdd, setList, setRm, catCmd,
+                              catAdd, catList, catRm, slotCmd, slotAdd, slotList, slotRm}) {
+        command->fallthrough();
+    }
 
     app.footer("매일 쓰는 것: sched now / sched today / sched off add --worker <이름> --today");
 
@@ -225,8 +317,10 @@ int main(int argc, char** argv) {
     //
     // today/now/show 도 그날 스냅샷이 없으면 계산해서 저장하므로 여기에 포함된다.
     storage::ScopedLock writeLock;
-    const bool needsLock = off->parsed() || workerOff->parsed() || assign->parsed() ||
-                           prune->parsed() || now_->parsed() || today->parsed() || show->parsed();
+    const bool writesData = off->parsed() || worker->parsed() || task->parsed() ||
+                            setCmd->parsed() || catCmd->parsed() || slotCmd->parsed();
+    const bool needsLock = writesData || assign->parsed() || prune->parsed() || now_->parsed() ||
+                           today->parsed() || show->parsed();
     if (needsLock) {
         const util::Result<void> locked =
             writeLock.acquire(dataDir, platform::processId(), util::SystemClock{}.now(),
@@ -390,6 +484,206 @@ int main(int argc, char** argv) {
                 std::cout << "휴무 " << removed.value() << "건을 해제했습니다.\n";
             }
             return kExitSuccess;
+        }
+    }
+
+    // 관리 명령. 전부 모델을 읽고 고친 뒤 해당 파일을 다시 쓴다.
+    if (task->parsed() || setCmd->parsed() || catCmd->parsed() || slotCmd->parsed() ||
+        workerAdd->parsed() || workerList->parsed() || workerRm->parsed() ||
+        workerEdit->parsed()) {
+        util::Result<storage::LoadedModel> loaded = storage::loadModel(dataDir);
+        if (!loaded) {
+            cli::renderError(std::cerr, loaded.error(), palette);
+            return exitCodeFor(loaded.error());
+        }
+        domain::Model model = std::move(loaded).value().model;
+
+        const auto splitIds = [](const std::string& text) {
+            std::vector<std::string> out;
+            std::istringstream stream(text);
+            std::string token;
+            while (std::getline(stream, token, ',')) {
+                if (!token.empty()) {
+                    out.push_back(token);
+                }
+            }
+            return out;
+        };
+        const auto report = [&](const util::Result<void>& result, const char* done) {
+            if (!result) {
+                cli::renderError(std::cerr, result.error(), palette);
+                return exitCodeFor(result.error());
+            }
+            std::cout << done << "\n";
+            return kExitSuccess;
+        };
+
+        // --- 작업자 ---
+        if (workerAdd->parsed()) {
+            std::vector<domain::Weekday> weeklyOff;
+            if (!weeklyOption.empty() && !parseWeekdayList(weeklyOption, weeklyOff)) {
+                return kExitInvalidUsage;
+            }
+            const util::Result<domain::Worker> added =
+                app::addWorker(dataDir, model, nameOption, idOption, weeklyOff);
+            if (!added) {
+                cli::renderError(std::cerr, added.error(), palette);
+                return exitCodeFor(added.error());
+            }
+            std::cout << "작업자를 추가했습니다: " << added.value().name << " ("
+                      << added.value().id.str() << ")\n";
+            return kExitSuccess;
+        }
+        if (workerList->parsed()) {
+            cli::renderWorkers(std::cout, model, allFlag, palette);
+            return kExitSuccess;
+        }
+        if (workerRm->parsed() || workerEdit->parsed()) {
+            domain::WorkerId workerId;
+            if (const int code = resolveWorkerOrExplain(model, workerOption, workerId);
+                code != kExitSuccess) {
+                return code;
+            }
+            if (workerRm->parsed()) {
+                if (hardFlag) {
+                    std::cout << "과거 배정 기록이 이 ID 를 참조합니다. 지우면 그 기록에서 "
+                                 "이름을 찾을 수 없게 됩니다.\n";
+                }
+                const util::Result<void> removed =
+                    app::removeWorker(dataDir, model, workerId, hardFlag);
+                return report(removed, hardFlag ? "작업자를 삭제했습니다."
+                                                : "작업자를 배정 대상에서 제외했습니다. "
+                                                  "(--hard 를 주면 정말 지웁니다)");
+            }
+            std::optional<bool> active;
+            if (!activeOption.empty()) {
+                if (activeOption != "true" && activeOption != "false") {
+                    std::cerr << "--active 는 true 또는 false 여야 합니다.\n";
+                    return kExitInvalidUsage;
+                }
+                active = (activeOption == "true");
+            }
+            std::optional<std::string> newName;
+            if (!nameOption.empty()) {
+                newName = nameOption;
+            }
+            return report(app::editWorker(dataDir, model, workerId, newName, active),
+                          "작업자를 수정했습니다.");
+        }
+
+        // --- 작업 ---
+        if (taskAdd->parsed()) {
+            app::TaskSpec spec;
+            spec.id = idOption;
+            spec.name = nameOption;
+            spec.requiredCount = countOption;
+            for (const std::string& id : splitIds(setsOption)) {
+                spec.taskSetIds.push_back(domain::TaskSetId{id});
+            }
+            for (const std::string& id : splitIds(conflictsOption)) {
+                spec.conflictsWith.push_back(domain::TaskId{id});
+            }
+            if (!weekdaysOption.empty() && !parseWeekdayList(weekdaysOption, spec.weekdays)) {
+                return kExitInvalidUsage;
+            }
+            return report(app::addTask(dataDir, model, spec), "작업을 추가했습니다.");
+        }
+        if (taskList->parsed()) {
+            cli::renderTasks(std::cout, model, setsOption, palette);
+            return kExitSuccess;
+        }
+        if (taskRm->parsed()) {
+            return report(app::removeTask(dataDir, model, domain::TaskId{idOption}),
+                          "작업을 지웠습니다.");
+        }
+        if (taskEdit->parsed()) {
+            std::optional<std::string> newName;
+            std::optional<int> newCount;
+            std::optional<std::vector<domain::TaskId>> newConflicts;
+            std::optional<std::vector<domain::Weekday>> newWeekdays;
+            std::optional<std::vector<domain::TaskSetId>> newSets;
+            if (!nameOption.empty()) {
+                newName = nameOption;
+            }
+            if (countOption > 0) {
+                newCount = countOption;
+            }
+            if (taskEdit->count("--conflicts") > 0) {
+                std::vector<domain::TaskId> ids;
+                for (const std::string& id : splitIds(conflictsOption)) {
+                    ids.push_back(domain::TaskId{id});
+                }
+                newConflicts = ids;
+            }
+            if (taskEdit->count("--weekdays") > 0) {
+                std::vector<domain::Weekday> days;
+                if (!weekdaysOption.empty() && !parseWeekdayList(weekdaysOption, days)) {
+                    return kExitInvalidUsage;
+                }
+                newWeekdays = days;
+            }
+            if (taskEdit->count("--set") > 0) {
+                std::vector<domain::TaskSetId> ids;
+                for (const std::string& id : splitIds(setsOption)) {
+                    ids.push_back(domain::TaskSetId{id});
+                }
+                newSets = ids;
+            }
+            return report(app::editTask(dataDir, model, domain::TaskId{idOption}, newName,
+                                        newCount, newConflicts, newWeekdays, newSets),
+                          "작업을 수정했습니다.");
+        }
+
+        // --- 작업집합 / 분류 / 시간대 ---
+        if (setAdd->parsed()) {
+            return report(app::addTaskSet(dataDir, model, idOption, nameOption),
+                          "작업집합을 추가했습니다.");
+        }
+        if (setList->parsed()) {
+            cli::renderTaskSets(std::cout, model, palette);
+            return kExitSuccess;
+        }
+        if (setRm->parsed()) {
+            return report(app::removeTaskSet(dataDir, model, domain::TaskSetId{idOption}),
+                          "작업집합을 지웠습니다.");
+        }
+        if (catAdd->parsed()) {
+            std::vector<domain::TaskSetId> sets;
+            for (const std::string& id : splitIds(setsOption)) {
+                sets.push_back(domain::TaskSetId{id});
+            }
+            return report(app::addCategory(dataDir, model, idOption, nameOption, sets),
+                          "분류를 추가했습니다.");
+        }
+        if (catList->parsed()) {
+            cli::renderCategories(std::cout, model, palette);
+            return kExitSuccess;
+        }
+        if (catRm->parsed()) {
+            return report(app::removeCategory(dataDir, model, domain::CategoryId{idOption}),
+                          "분류를 지웠습니다.");
+        }
+        if (slotAdd->parsed()) {
+            app::TimeSlotSpec spec;
+            spec.id = idOption;
+            spec.displayName = nameOption;
+            spec.start = startOption;
+            spec.end = endOption;
+            for (const std::string& id : splitIds(catsOption)) {
+                spec.categoryIds.push_back(domain::CategoryId{id});
+            }
+            if (!weekdaysOption.empty() && !parseWeekdayList(weekdaysOption, spec.weekdays)) {
+                return kExitInvalidUsage;
+            }
+            return report(app::addTimeSlot(dataDir, model, spec), "시간대를 추가했습니다.");
+        }
+        if (slotList->parsed()) {
+            cli::renderTimeSlots(std::cout, model, palette);
+            return kExitSuccess;
+        }
+        if (slotRm->parsed()) {
+            return report(app::removeTimeSlot(dataDir, model, domain::TimeSlotId{idOption}),
+                          "시간대를 지웠습니다.");
         }
     }
 

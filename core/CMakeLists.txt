@@ -16,6 +16,7 @@ add_library(sched_core STATIC
     storage/json_io.cpp
     storage/lock.cpp
     app/absence_service.cpp
+    app/admin_service.cpp
     app/assign_service.cpp
     app/data_dir.cpp
     app/prune_service.cpp

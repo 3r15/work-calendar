@@ -228,9 +228,12 @@ void checkTimeSlots(const Model& model, Report& report) {
                 continue;
             }
             if (a.start < b.end && b.start < a.end) {
-                report.error(kConfigFile, "시간대 \"" + a.displayName + "\" 와 \"" +
-                                              b.displayName + "\" 가 " + joinWeekdays(shared) +
-                                              "요일에 겹칩니다.");
+                report.error(kConfigFile,
+                             "시간대 \"" + a.displayName + "\"" +
+                                 std::string{util::josaWaGwa(a.displayName)} + " \"" +
+                                 b.displayName + "\"" +
+                                 std::string{util::josaIGa(b.displayName)} + " " +
+                                 joinWeekdays(shared) + "요일에 겹칩니다.");
             }
         }
     }
