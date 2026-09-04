@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/app/absence_service.h"
 #include "core/app/assign_service.h"
 #include "core/app/day_view.h"
 #include "core/domain/finding.h"
@@ -14,6 +15,8 @@ namespace cli {
 
 void renderDayView(std::ostream& out, const app::DayView& view, const util::DateTime& now);
 void renderAssignOutcome(std::ostream& out, const app::AssignOutcome& outcome);
+void renderAbsences(std::ostream& out, const domain::Model& model,
+                    const std::vector<domain::Absence>& absences);
 void renderReport(std::ostream& out, const domain::Report& report);
 void renderError(std::ostream& out, const util::Error& error);
 

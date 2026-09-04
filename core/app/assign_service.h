@@ -25,8 +25,11 @@ struct AssignOutcome {
 
 // 그날 스냅샷이 없으면 계산해서 저장하고, 있으면 읽기만 한다 (DESIGN 3.1).
 // 조회할 때마다 다시 계산하면 같은 날 결과가 달라진다.
+//
+// force 를 주면 기존 스냅샷을 버리고 다시 계산한다. 당일 급휴 뒤 재배정이 이 경로다 (D-009).
+// 자동으로는 절대 하지 않는다 — 사람이 이미 움직이고 있는 상태에서 화면만 바뀌면 위험하다.
 util::Result<AssignOutcome> ensureSnapshot(const std::filesystem::path& dataDir,
                                            const domain::Model& model, const util::Date& date,
-                                           const util::DateTime& now);
+                                           const util::DateTime& now, bool force = false);
 
 }  // namespace app

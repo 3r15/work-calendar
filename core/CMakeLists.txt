@@ -14,10 +14,12 @@ add_library(sched_core STATIC
     scheduling/policy.cpp
     storage/atomic_write.cpp
     storage/json_io.cpp
+    app/absence_service.cpp
     app/assign_service.cpp
     app/data_dir.cpp
     app/day_view.cpp
     app/validate_service.cpp
+    app/worker_lookup.cpp
     util/clock.cpp
     util/date.cpp
     util/display_width.cpp
