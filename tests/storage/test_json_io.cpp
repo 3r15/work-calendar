@@ -232,3 +232,39 @@ TEST_CASE("tolerates a utf8 bom", "[json_io]") {
     std::error_code ec;
     fs::remove_all(temp, ec);
 }
+
+// rr-cursor.json 은 ROADMAP 이 말하는 "5개 파일" 의 다섯 번째다. 커서를 실제로 쓰는 것은
+// Phase 3 이지만 읽고 쓰는 것은 여기 속하므로 형식만 고정해 둔다.
+TEST_CASE("round trips the round robin cursor file", "[json_io]") {
+    const fs::path temp = fs::temp_directory_path() / "sched_test_cursor";
+    fs::remove_all(temp);
+    fs::create_directories(temp);
+    const fs::path path = temp / "state" / "rr-cursor.json";
+
+    domain::CursorState state;
+    state.cursors.emplace(domain::TaskSetId{"cleaning_am"}, 2);
+    state.cursors.emplace(domain::TaskSetId{"cleaning_pm"}, 0);
+    state.cursors.emplace(domain::TaskSetId{"zone"}, 3);
+
+    REQUIRE(storage::saveCursors(path, state).ok());
+
+    const util::Result<storage::Loaded<domain::CursorState>> loaded = storage::loadCursors(path);
+    REQUIRE(loaded.ok());
+    REQUIRE(loaded.value().report.empty());
+    REQUIRE(loaded.value().value.cursors.size() == 3);
+    REQUIRE(loaded.value().value.cursors.at(domain::TaskSetId{"cleaning_am"}) == 2);
+    REQUIRE(loaded.value().value.cursors.at(domain::TaskSetId{"zone"}) == 3);
+    REQUIRE(storage::toJsonText(loaded.value().value) == storage::toJsonText(state));
+
+    std::error_code ec;
+    fs::remove_all(temp, ec);
+}
+
+// 커서 파일은 처음 실행할 때 없다. 없는 것은 오류가 아니라 "아직 아무것도 안 돌았다" 는 뜻이므로,
+// 부르는 쪽이 NotFound 를 빈 상태로 바꿔 쓸 수 있어야 한다.
+TEST_CASE("missing cursor file is reported as not found", "[json_io]") {
+    const util::Result<storage::Loaded<domain::CursorState>> loaded =
+        storage::loadCursors(fs::temp_directory_path() / "sched_no_cursor" / "rr-cursor.json");
+    REQUIRE_FALSE(loaded.ok());
+    REQUIRE(loaded.error().code == util::ErrorCode::NotFound);
+}
