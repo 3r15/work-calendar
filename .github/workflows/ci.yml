@@ -110,3 +110,18 @@ jobs:
       - name: Test
         if: steps.check.outputs.skip != 'true'
         run: ctest --preset debug --output-on-failure
+
+      # ROADMAP Phase 0 완료 기준 5번의 자동화 가능한 절반.
+      # 파이프로 받으므로 진짜 콘솔 렌더링은 아니지만, 프로그램이 UTF-8 바이트를 내보내는지는 확인된다.
+      # 비교 문자열을 바이트로 적는 이유: 러너 셸의 인코딩에 결과가 좌우되지 않게 하려는 것.
+      - name: sched --version 이 한글을 온전히 출력하는지
+        if: steps.check.outputs.skip != 'true'
+        shell: bash
+        run: |
+          out=$(./build/debug/bin/sched.exe --version)
+          echo "$out" | od -c | head -3
+          echo "$out" | grep -q "$(printf '\xec\x9e\x91\xec\x97\x85')" || {
+            echo "::error::--version 출력의 한글이 깨졌습니다. /utf-8 플래그나 소스 인코딩을 확인하세요."
+            exit 1
+          }
+          echo "한글 출력 정상: $out"

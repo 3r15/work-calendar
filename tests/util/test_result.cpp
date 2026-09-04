@@ -29,7 +29,8 @@ Result<void> checkEmpty(const std::vector<int>& values) {
 
 }  // namespace
 
-TEST_CASE("성공은 값을, 실패는 오류를 담는다", "[result]") {
+// 성공은 값을, 실패는 오류를 담는다.
+TEST_CASE("holds either a value or an error", "[result]") {
     const Result<int> good = parsePositive(3);
     REQUIRE(good.ok());
     REQUIRE(static_cast<bool>(good));
@@ -41,13 +42,15 @@ TEST_CASE("성공은 값을, 실패는 오류를 담는다", "[result]") {
     REQUIRE(bad.error().code == ErrorCode::InvalidUsage);
 }
 
-TEST_CASE("오류 메시지는 무엇이 잘못됐고 어떻게 고치는지 담는다", "[result]") {
+// 오류 메시지는 무엇이 잘못됐고(message) 어떻게 고치는지(hint)를 담는다.
+TEST_CASE("error carries message and hint", "[result]") {
     const Result<int> bad = parsePositive(-1);
     REQUIRE(bad.error().message == "0보다 큰 수를 넣어 주세요.");
     REQUIRE(bad.error().hint == "예: sched task edit --count 2");
 }
 
-TEST_CASE("hint 는 없어도 된다", "[result]") {
+// hint 는 없어도 된다.
+TEST_CASE("hint is optional", "[result]") {
     const Result<void> bad = checkEmpty({});
     REQUIRE_FALSE(bad.ok());
     REQUIRE(bad.error().hint.empty());
@@ -56,14 +59,16 @@ TEST_CASE("hint 는 없어도 된다", "[result]") {
     REQUIRE(good.ok());
 }
 
-TEST_CASE("값을 옮길 수 있다", "[result]") {
+// 값을 옮길 수 있다.
+TEST_CASE("value can be moved out", "[result]") {
     Result<std::string> r{std::string("청소기")};
     REQUIRE(r.ok());
     const std::string taken = std::move(r).value();
     REQUIRE(taken == "청소기");
 }
 
-TEST_CASE("valueOr 은 실패했을 때 대체값을 준다", "[result]") {
+// valueOr 은 실패했을 때 대체값을 준다.
+TEST_CASE("valueOr falls back on error", "[result]") {
     REQUIRE(parsePositive(7).valueOr(1) == 7);
     REQUIRE(parsePositive(0).valueOr(1) == 1);
 }
